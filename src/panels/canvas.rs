@@ -69,7 +69,8 @@ pub fn update_drag_and_zoom(
             // 关键数学：以鼠标指针为中心进行缩放
             let screen_rect = response.rect;
             let render_offset = hover_pos - screen_rect.min; // 鼠标相对于视口左上角的位置
-            canvas_state.offset -= render_offset * (zoom_factor - 1.0);
+            canvas_state.offset =
+                zoom_factor * canvas_state.offset + (1.0 - zoom_factor) * render_offset;
 
             canvas_state.scale = new_scale;
         }
