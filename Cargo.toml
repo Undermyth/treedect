@@ -5,4 +5,7 @@ edition = "2024"
 
 [dependencies]
 eframe = "0.33.2"
+env_logger = "0.11.8"
+image = "0.25.9"
+log = "0.4.29"
 rfd = "0.16.0"

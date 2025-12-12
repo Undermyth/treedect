@@ -2,9 +2,11 @@
 
 use eframe::{egui, epaint};
 
+mod actions;
 mod canvas;
 
 fn main() -> eframe::Result {
+    env_logger::init();
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([1440.0, 800.0]),
         ..Default::default()
@@ -60,6 +62,20 @@ impl eframe::App for TreeDectApp {
                         |ui| {
                             ui.heading("Actions");
                             ui.add_space(10.0);
+                            ui.vertical_centered_justified(|ui| {
+                                if ui
+                                    .add(
+                                        egui::Button::new("Load Image")
+                                            .min_size(egui::Vec2::new(ui.available_width(), 30.0)),
+                                    )
+                                    .clicked()
+                                {
+                                    let image_path = actions::load_image_action();
+                                    if let Some(image_path) = image_path {
+                                        // 加载图片
+                                    }
+                                }
+                            });
                         },
                     );
 
