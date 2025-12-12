@@ -109,23 +109,8 @@ impl Layer {
         }
     }
 
-    pub fn from_path(name: &str, path: String) -> Result<Self, Box<dyn std::error::Error>> {
-        let path = std::path::Path::new(&path);
-        let image = image::ImageReader::open(path)?.decode()?;
-        let size = [image.width() as _, image.height() as _];
-        let image_buffer = image.to_rgba8();
-        let pixels = image_buffer.as_flat_samples();
-        Ok(Self {
-            name: name.to_owned(),
-            visible: true,
-            opacity: 1.0,
-            image_data: egui::ColorImage::from_rgba_premultiplied(size, pixels.as_slice()),
-            texture: None,
-        })
-    }
-
     // 异步版本的图像加载
-    pub async fn from_path_async(
+    pub async fn from_path(
         name: String,
         path: String,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
