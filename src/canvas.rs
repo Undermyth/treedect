@@ -8,6 +8,8 @@ pub struct CanvasState {
     pub scale: f32,
     /// 鼠标拖拽的起始点
     drag_start: Option<egui::Pos2>,
+    /// 是否初始化
+    initialized: bool,
 }
 
 impl Default for CanvasState {
@@ -16,6 +18,7 @@ impl Default for CanvasState {
             offset: egui::Vec2::ZERO,
             scale: 1.0,
             drag_start: None,
+            initialized: false,
         }
     }
 }
@@ -24,7 +27,19 @@ pub fn update_drag_and_zoom(
     ui: &mut egui::Ui,
     response: &egui::Response,
     canvas_state: &mut CanvasState,
+    canvas_size: egui::Vec2,
+    image_size: [usize; 2],
 ) {
+    if !canvas_state.initialized {
+        let initial_scale = (canvas_size.x as f32 / image_size[0] as f32)
+            .min(canvas_size.y as f32 / image_size[1] as f32);
+        let initial_offset = egui::Vec2::new((canvas_size.x - canvas_size.y) / 2.0, 0.0);
+        canvas_state.scale = initial_scale;
+        canvas_state.offset = initial_offset;
+        canvas_state.initialized = true;
+        log::info!("initial_scale: {initial_scale:?}");
+        log::info!("initial_offset: {initial_offset:?}");
+    }
     // 处理拖拽 (Pan)
     if response.drag_started() {
         canvas_state.drag_start = response.hover_pos();
@@ -46,6 +61,7 @@ pub fn update_drag_and_zoom(
         if scroll_delta != 0.0 {
             let zoom_factor = if scroll_delta > 0.0 { 1.1 } else { 0.9 };
             let new_scale = canvas_state.scale * zoom_factor;
+            // let new_scale = canvas_state.scale + (zoom_factor - 1.0);
 
             // 限制缩放范围，防止过大或过小
             let new_scale = new_scale.clamp(0.1, 10.0);

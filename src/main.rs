@@ -25,22 +25,23 @@ struct TreeDectApp {
 
 impl TreeDectApp {
     fn new(_cc: &eframe::CreationContext) -> Self {
-        // 初始化两个图层：底层红色，顶层蓝色（带透明洞）
+        // layers will be stacked with the order 0, 1, ...
         Self {
-            layers: vec![
-                canvas::Layer::new(
-                    "Background (Red)",
-                    egui::Color32::from_rgb(200, 50, 50),
-                    300,
-                    300,
-                ),
-                canvas::Layer::new(
-                    "Foreground (Blue)",
-                    egui::Color32::from_rgb(50, 50, 200),
-                    300,
-                    300,
-                ),
-            ],
+            layers: Vec::<canvas::Layer>::new(),
+            // layers: vec![
+            //     canvas::Layer::new(
+            //         "Background (Red)",
+            //         egui::Color32::from_rgb(200, 50, 50),
+            //         300,
+            //         300,
+            //     ),
+            //     canvas::Layer::new(
+            //         "Foreground (Blue)",
+            //         egui::Color32::from_rgb(50, 50, 200),
+            //         300,
+            //         300,
+            //     ),
+            // ],
             canvas_state: canvas::CanvasState::default(),
         }
     }
@@ -73,6 +74,10 @@ impl eframe::App for TreeDectApp {
                                     let image_path = actions::load_image_action();
                                     if let Some(image_path) = image_path {
                                         // 加载图片
+                                        self.layers.push(
+                                            canvas::Layer::from_path("New Layer", image_path)
+                                                .expect("load image failed"),
+                                        );
                                     }
                                 }
                             });
@@ -166,7 +171,16 @@ impl eframe::App for TreeDectApp {
                 epaint::StrokeKind::Inside,
             );
 
-            canvas::update_drag_and_zoom(ui, &response, &mut self.canvas_state);
+            if self.layers.len() > 0 {
+                let image_size = self.layers[0].get_image_size();
+                canvas::update_drag_and_zoom(
+                    ui,
+                    &response,
+                    &mut self.canvas_state,
+                    canvas_size,
+                    image_size,
+                );
+            }
 
             // 2. 循环绘制图层
             for layer in &mut self.layers {
