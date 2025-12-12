@@ -124,6 +124,31 @@ impl Layer {
         })
     }
 
+    // 异步版本的图像加载
+    pub async fn from_path_async(
+        name: String,
+        path: String,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        // 在后台线程中执行阻塞的文件I/O操作
+        let layer = tokio::task::spawn_blocking(move || {
+            let path = std::path::Path::new(&path);
+            let image = image::ImageReader::open(path)?.decode()?;
+            let size = [image.width() as _, image.height() as _];
+            let image_buffer = image.to_rgba8();
+            let pixels = image_buffer.as_flat_samples();
+            Ok::<Self, Box<dyn std::error::Error + Send + Sync>>(Self {
+                name: name.to_owned(),
+                visible: true,
+                opacity: 1.0,
+                image_data: egui::ColorImage::from_rgba_premultiplied(size, pixels.as_slice()),
+                texture: None,
+            })
+        })
+        .await??;
+
+        Ok(layer)
+    }
+
     /// 确保纹理已上传到 GPU
     pub fn texture_id(&mut self, ctx: &egui::Context) -> egui::TextureId {
         self.texture
