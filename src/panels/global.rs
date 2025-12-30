@@ -1,15 +1,61 @@
+use crate::models::dinov2::Dinov2Model;
+use crate::models::sam2::SAM2Model;
 use crate::panels::canvas;
 
 pub enum ProgressState {
     Loading(String),
     Processing(String, f32),
     Finished,
+    Error(String),
+}
+
+/// This struct contains most of the parameters to control segmentation and classification.
+pub struct Params {
+    /// segmentation resolution, in pixels. default to 512.
+    ///
+    /// This parameter is used for high resolution processing, since SAM2 only supports 1024x1024.
+    /// Patches of size rel x rel will be truncated around each sampling point, and feed into SAM2.
+    ///
+    /// Larger resolution will make the picture clearer; However, the global noise will also increase.
+    /// Note that rel >= 1024 makes no sense since the intrisic resolution of SAM2 is 1024x1024.
+    /// Even larger resolution will cause downsampling inside the model.
+    ///
+    /// Smaller resolution will have better resolution, but with the assumption that
+    /// **the recognized object should be small enough to fall into the patch**.
+    pub segment_rel: i32,
+    /// directory path where ONNX models are stored.
+    pub model_dir: String,
+    /// model used for segmentation. Selected from SAM2 family.
+    pub segment_model_name: Option<String>,
+    /// model used for classification. Selected from DINOv2 family.
+    pub classify_model_name: Option<String>,
+    /// whether to use height mapping for sampling points estimation.
+    pub use_height_sampling: bool,
+    /// if using grid sampling, the interval between adjacent sampling points. (in pixels)
+    pub grid_sampling_interval: usize,
+}
+
+impl Params {
+    pub fn new() -> Self {
+        Self {
+            segment_rel: 512,
+            model_dir: "./models".to_string(),
+            segment_model_name: None,
+            classify_model_name: None,
+            use_height_sampling: false,
+            grid_sampling_interval: 200,
+        }
+    }
 }
 
 pub struct GlobalState {
     pub layers: Vec<canvas::Layer>,
     pub progress_state: ProgressState,
     pub canvas_state: canvas::CanvasState,
+    pub params: Params,
+    pub ort_initialized: bool,
+    pub segment_model: Option<SAM2Model>,
+    pub classify_model: Option<Dinov2Model>,
 }
 
 impl GlobalState {
@@ -18,6 +64,10 @@ impl GlobalState {
             layers: Vec::<canvas::Layer>::new(),
             canvas_state: canvas::CanvasState::default(),
             progress_state: ProgressState::Finished,
+            params: Params::new(),
+            ort_initialized: false,
+            segment_model: None,
+            classify_model: None,
         }
     }
 }

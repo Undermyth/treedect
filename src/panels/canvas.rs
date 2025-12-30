@@ -83,12 +83,16 @@ pub struct Layer {
     pub visible: bool,
     pub opacity: f32, // 0.0 - 1.0
     // 原始 CPU 数据，用于后续可能的像素操作
-    image_data: egui::ColorImage,
+    pub image_data: egui::ColorImage,
     // GPU 纹理句柄
     texture: Option<egui::TextureHandle>,
+    // below for editable layers. If the layer is not editable, palette
+    // and other data structure will not be maintained.
+    pub editable: bool,
 }
 
 impl Layer {
+    #[allow(dead_code)]
     pub fn new(name: &str, color: egui::Color32, width: usize, height: usize) -> Self {
         // 创建一个纯色的测试图片，你可以替换为加载真实的图片65
         let mut image_data = egui::ColorImage::filled([width, height], color);
@@ -107,10 +111,12 @@ impl Layer {
             opacity: 1.0,
             image_data,
             texture: None,
+            editable: false,
         }
     }
 
     // 异步版本的图像加载
+    // create image layer
     pub async fn from_path(
         name: String,
         path: String,
@@ -128,11 +134,89 @@ impl Layer {
                 opacity: 1.0,
                 image_data: egui::ColorImage::from_rgba_premultiplied(size, pixels.as_slice()),
                 texture: None,
+                editable: false,
             })
         })
         .await??;
 
         Ok(layer)
+    }
+
+    fn cpu_draw_circle(
+        image: &mut egui::ColorImage,
+        center: [usize; 2],
+        radius: usize,
+        color: egui::Color32,
+    ) {
+        let center_x = center[0];
+        let center_y = center[1];
+        let width = image.width();
+        let height = image.height();
+        for x in (center_x.saturating_sub(radius))..(center_x + radius).min(width) {
+            for y in (center_y.saturating_sub(radius))..(center_y + radius).min(height) {
+                if ((x as i32 - center_x as i32).pow(2) + (y as i32 - center_y as i32).pow(2))
+                    as usize
+                    <= radius.pow(2)
+                {
+                    image[(x, y)] = color;
+                }
+            }
+        }
+    }
+
+    fn cpu_draw_center_square(image: &mut egui::ColorImage, length: usize, width: usize) {
+        let img_width = image.width();
+        let img_height = image.height();
+
+        // Calculate the center of the image
+        let center_x = img_width / 2;
+        let center_y = img_height / 2;
+
+        // Calculate the top-left corner of the square
+        let start_x = center_x.saturating_sub(length / 2);
+        let start_y = center_y.saturating_sub(length / 2);
+
+        // Calculate the bottom-right corner of the square
+        let end_x = (start_x + length).min(img_width);
+        let end_y = (start_y + length).min(img_height);
+
+        // Draw the square frame with the specified stroke width
+        for y in start_y..end_y {
+            for x in start_x..end_x {
+                // Check if this pixel is on the border of the square
+                if x < start_x + width
+                    || x >= end_x - width
+                    || y < start_y + width
+                    || y >= end_y - width
+                {
+                    // Only set the pixel if it's within image bounds
+                    if x < img_width && y < img_height {
+                        image[(x, y)] = egui::Color32::RED;
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn from_sampling_points(
+        sampling_points: Vec<[usize; 2]>,
+        width: usize,
+        height: usize,
+        rel: usize,
+    ) -> Self {
+        let mut image_data = egui::ColorImage::filled([width, height], egui::Color32::TRANSPARENT);
+        for point in sampling_points {
+            Layer::cpu_draw_circle(&mut image_data, point, 15, egui::Color32::RED);
+        }
+        Layer::cpu_draw_center_square(&mut image_data, rel, 10);
+        Self {
+            name: "sampling points".to_string(),
+            visible: true,
+            opacity: 1.0,
+            image_data,
+            texture: None,
+            editable: false,
+        }
     }
 
     /// 确保纹理已上传到 GPU

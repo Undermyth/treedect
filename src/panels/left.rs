@@ -29,6 +29,7 @@ impl ActionPanel {
                 if let Ok(result) = receiver.try_recv() {
                     match result {
                         Ok(layer) => {
+                            global.layers.clear();
                             global.layers.push(layer);
                             global.progress_state = global::ProgressState::Finished;
                         }
@@ -76,6 +77,8 @@ impl ActionPanel {
                     });
                 }
             }
+
+            // 按钮本体和触发逻辑
             if ui
                 .add(components::wide_button("Load Image", ui.available_width()))
                 .clicked()

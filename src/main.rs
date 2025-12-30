@@ -2,6 +2,7 @@
 
 use eframe::egui;
 
+mod models;
 mod panels;
 
 fn main() -> eframe::Result {

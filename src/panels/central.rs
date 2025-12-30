@@ -92,6 +92,10 @@ impl Progress {
                 ui.colored_label(egui::Color32::GREEN, "●");
                 ui.label("All processing finished");
             }),
+            global::ProgressState::Error(text) => ui.horizontal(|ui| {
+                ui.colored_label(egui::Color32::RED, "●");
+                ui.label(text);
+            }),
         });
     }
 }

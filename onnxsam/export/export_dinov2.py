@@ -33,8 +33,8 @@ model = torch.hub.load('facebookresearch/dinov2', 'dinov2_vitb14_reg')
 print(model)
 model = DINOv2Model(model)
 model(x)
-batch_dim = torch.export.Dim("batch", min=1, max=1024)
-dynamic_shapes = {"x": {0: batch_dim}}
+# batch_dim = torch.export.Dim("batch", min=1, max=1024)
+# dynamic_shapes = {"x": {0: batch_dim}}
 filename = "output_models/dinov2_vitb_reg.onnx"
 torch.onnx.export(
     model,
@@ -44,7 +44,7 @@ torch.onnx.export(
     export_params=True,
     opset_version=18,
     do_constant_folding=True,
-    # input_names=["img"],
+    input_names=["img"],
     output_names=["patch_tokens"],
     dynamic_axes={"img": {0: "batch"}}
     # dynamic_shapes=dynamic_shapes

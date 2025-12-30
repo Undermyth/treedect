@@ -1,12 +1,17 @@
 use eframe::egui;
 
 use crate::panels::global;
+use crate::panels::params;
 
-pub struct RightPanel {}
+pub struct RightPanel {
+    params_panel: params::ParamsPanel,
+}
 
 impl RightPanel {
     pub fn new() -> Self {
-        Self {}
+        Self {
+            params_panel: params::ParamsPanel::new(),
+        }
     }
 
     #[allow(unused_variables)]
@@ -27,10 +32,11 @@ impl RightPanel {
                         egui::ScrollArea::vertical()
                             .auto_shrink([false, true])
                             .show(ui, |ui| {
-                                ui.set_width(ui.available_width());
-                                for i in 0..32 {
-                                    ui.label(format!("Control item {}", i));
-                                }
+                                // ui.set_width(ui.available_width());
+                                self.params_panel.ui(ui, global);
+                                // for i in 0..32 {
+                                //     ui.label(format!("Control item {}", i));
+                                // }
                             });
                     },
                 );

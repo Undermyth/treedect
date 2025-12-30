@@ -1,6 +1,6 @@
 ## SAM2 & DINOv2 ONNX Conversion
 
-This is a subproject which converts SAM2 & DINOv2 models into ONNX format. `treedect` utilizes ONNX models for portable and efficient inference, and also for better integration with Rust ecosystem. 
+This is a subproject which converts SAM2 & DINOv2 models into ONNX format. `treedect` utilizes ONNX models for portable and efficient inference, and also for better integration with Rust ecosystem. Since the conversion process is not trivial, this subproject is maintained separately. All the converted models are are designed to access through web, which are uploaded to [Hugging Face](https://huggingface.co/Activator/vision_onnx).
 
 ONNX exportation is very sensitive to environment, so it's recommended to have a dedicated environment for this purpose. As verified, we should have python <= 3.11 (for compatibility with `onnxsim` binaries), and torch == 2.5.1.
 
