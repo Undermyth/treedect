@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use eframe::egui;
+use eframe::egui::Visuals;
 
 mod models;
 mod panels;
@@ -39,6 +40,7 @@ impl TreeDectApp {
 
 impl eframe::App for TreeDectApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        ctx.set_visuals(Visuals::light());
         egui::SidePanel::left("layer_control").show(ctx, |ui| {
             self.left_panel.ui(ui, &mut self.global);
         });

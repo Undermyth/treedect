@@ -7,8 +7,9 @@ edition = "2024"
 eframe = "0.33.2"
 env_logger = "0.11.8"
 futures = "0.3.31"
-image = "0.25.9"
+image = { version = "0.25.9", features = ["rayon"] }
 log = "0.4.29"
+ndarray = { version = "0.16.0", features = ["rayon"] }
 ort = { version = "2.0.0-rc.10", features = ["webgpu"] }
 phf = { version = "0.13.1", features = ["macros"] }
 rfd = "0.16.0"

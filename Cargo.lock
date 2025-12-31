@@ -2392,6 +2392,7 @@ dependencies = [
  "portable-atomic",
  "portable-atomic-util",
  "rawpointer",
+ "rayon",
 ]
 
 [[package]]
@@ -4058,6 +4059,7 @@ dependencies = [
  "futures",
  "image",
  "log",
+ "ndarray",
  "ort",
  "phf",
  "rfd",

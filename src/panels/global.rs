@@ -1,3 +1,5 @@
+use image::RgbaImage;
+
 use crate::models::dinov2::Dinov2Model;
 use crate::models::sam2::SAM2Model;
 use crate::panels::canvas;
@@ -33,17 +35,20 @@ pub struct Params {
     pub use_height_sampling: bool,
     /// if using grid sampling, the interval between adjacent sampling points. (in pixels)
     pub grid_sampling_interval: usize,
+    /// batch size for both segmentation and classification.
+    pub batch_size: usize,
 }
 
 impl Params {
     pub fn new() -> Self {
         Self {
-            segment_rel: 512,
-            model_dir: "./models".to_string(),
+            segment_rel: 768,
+            model_dir: "./output_models".to_string(),
             segment_model_name: None,
             classify_model_name: None,
             use_height_sampling: false,
             grid_sampling_interval: 200,
+            batch_size: 32,
         }
     }
 }
@@ -56,6 +61,8 @@ pub struct GlobalState {
     pub ort_initialized: bool,
     pub segment_model: Option<SAM2Model>,
     pub classify_model: Option<Dinov2Model>,
+    pub raw_image: Option<RgbaImage>,
+    pub sampling_points: Option<Vec<[usize; 2]>>,
 }
 
 impl GlobalState {
@@ -68,6 +75,8 @@ impl GlobalState {
             ort_initialized: false,
             segment_model: None,
             classify_model: None,
+            raw_image: None,
+            sampling_points: None,
         }
     }
 }

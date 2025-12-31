@@ -28,7 +28,9 @@ impl ActionPanel {
             if let Some(receiver) = &self.image_load_receiver {
                 if let Ok(result) = receiver.try_recv() {
                     match result {
-                        Ok(layer) => {
+                        Ok(mut layer) => {
+                            global.raw_image = layer.raw_image;
+                            layer.raw_image = None;
                             global.layers.clear();
                             global.layers.push(layer);
                             global.progress_state = global::ProgressState::Finished;
@@ -95,7 +97,9 @@ impl ActionPanel {
                     ui.available_width(),
                 ))
                 .clicked()
-            {}
+            {
+                actions::segment_action(global);
+            }
         });
     }
 }

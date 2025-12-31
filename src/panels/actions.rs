@@ -2,6 +2,7 @@ use eframe::egui;
 use phf::{Map, phf_map};
 use std::sync::mpsc::Sender;
 
+use crate::models::batcher::SAM2Batcher;
 use crate::models::dinov2::Dinov2Model;
 use crate::models::sam2::SAM2Model;
 use crate::panels::global;
@@ -173,4 +174,28 @@ pub fn filter_sampling_action(
         })
         .cloned()
         .collect()
+}
+
+pub fn segment_action(global: &mut global::GlobalState) {
+    // let x = ndarray::Array4::<f32>::zeros((3, 3, 3, 3));
+    // log::info!("{}", x);
+    if let Some(sampling_points) = global.sampling_points.clone() {
+        if let Some(raw_image) = &global.raw_image {
+            let batcher = SAM2Batcher::new(
+                global.params.batch_size,
+                global.params.segment_rel as usize,
+                sampling_points,
+                raw_image,
+            );
+            let mut iter = batcher.into_iter();
+            let batch = iter.next().unwrap();
+            let shape = batch.shape();
+            log::info!("batch: {shape:?}");
+            // for batch in batcher.into_iter() {
+            //     let shape = batch.shape();
+            //     log::info!("batch: {shape:?}");
+            //     continue;
+            // }
+        }
+    }
 }

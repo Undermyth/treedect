@@ -82,6 +82,7 @@ pub struct Layer {
     pub name: String,
     pub visible: bool,
     pub opacity: f32, // 0.0 - 1.0
+    pub raw_image: Option<image::RgbaImage>,
     // 原始 CPU 数据，用于后续可能的像素操作
     pub image_data: egui::ColorImage,
     // GPU 纹理句柄
@@ -109,6 +110,7 @@ impl Layer {
             name: name.to_owned(),
             visible: true,
             opacity: 1.0,
+            raw_image: None,
             image_data,
             texture: None,
             editable: false,
@@ -128,10 +130,12 @@ impl Layer {
             let size = [image.width() as _, image.height() as _];
             let image_buffer = image.to_rgba8();
             let pixels = image_buffer.as_flat_samples();
+            let raw_image = image_buffer.clone();
             Ok::<Self, Box<dyn std::error::Error + Send + Sync>>(Self {
                 name: name.to_owned(),
                 visible: true,
                 opacity: 1.0,
+                raw_image: Some(raw_image),
                 image_data: egui::ColorImage::from_rgba_premultiplied(size, pixels.as_slice()),
                 texture: None,
                 editable: false,
@@ -144,7 +148,7 @@ impl Layer {
 
     fn cpu_draw_circle(
         image: &mut egui::ColorImage,
-        center: [usize; 2],
+        center: &[usize; 2],
         radius: usize,
         color: egui::Color32,
     ) {
@@ -199,7 +203,7 @@ impl Layer {
     }
 
     pub fn from_sampling_points(
-        sampling_points: Vec<[usize; 2]>,
+        sampling_points: &Vec<[usize; 2]>,
         width: usize,
         height: usize,
         rel: usize,
@@ -213,6 +217,7 @@ impl Layer {
             name: "sampling points".to_string(),
             visible: true,
             opacity: 1.0,
+            raw_image: None,
             image_data,
             texture: None,
             editable: false,

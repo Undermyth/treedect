@@ -132,11 +132,12 @@ impl ParamsPanel {
                         log::info!("Filter sampling took: {:?}", filter_time);
                         log::info!("Number of sampling points: {}", sampling_points.len());
                         global.layers.push(Layer::from_sampling_points(
-                            sampling_points,
+                            &sampling_points,
                             width,
                             height,
                             global.params.segment_rel as usize,
                         ));
+                        global.sampling_points = Some(sampling_points);
                     }
                 }
                 ui.end_row();
@@ -147,6 +148,13 @@ impl ParamsPanel {
                     egui::DragValue::new(&mut global.params.grid_sampling_interval)
                         .speed(5)
                         .suffix(" px"),
+                );
+                ui.end_row();
+
+                ui.label("Batch Size");
+                ui.add_sized(
+                    ui.available_size_before_wrap(),
+                    egui::DragValue::new(&mut global.params.batch_size).speed(2)
                 );
                 ui.end_row();
             });
