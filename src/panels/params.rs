@@ -126,7 +126,7 @@ impl ParamsPanel {
                         let start_time = std::time::Instant::now();
                         let sampling_points = actions::filter_sampling_action(
                             &mut sampling_points,
-                            &global.layers[0].image_data,
+                            global.raw_image.as_ref().unwrap(),
                         );
                         let filter_time = start_time.elapsed();
                         log::info!("Filter sampling took: {:?}", filter_time);
@@ -154,7 +154,7 @@ impl ParamsPanel {
                 ui.label("Batch Size");
                 ui.add_sized(
                     ui.available_size_before_wrap(),
-                    egui::DragValue::new(&mut global.params.batch_size).speed(2)
+                    egui::DragValue::new(&mut global.params.batch_size).speed(2),
                 );
                 ui.end_row();
             });

@@ -1,4 +1,4 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+// #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use eframe::egui;
 use eframe::egui::Visuals;
@@ -8,6 +8,7 @@ mod panels;
 
 fn main() -> eframe::Result {
     env_logger::init();
+    log::info!("Treedect by egui");
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([1440.0, 800.0]),
         ..Default::default()

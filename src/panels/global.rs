@@ -1,5 +1,3 @@
-use image::RgbaImage;
-
 use crate::models::dinov2::Dinov2Model;
 use crate::models::sam2::SAM2Model;
 use crate::panels::canvas;
@@ -61,7 +59,7 @@ pub struct GlobalState {
     pub ort_initialized: bool,
     pub segment_model: Option<SAM2Model>,
     pub classify_model: Option<Dinov2Model>,
-    pub raw_image: Option<RgbaImage>,
+    pub raw_image: Option<canvas::LayerImage>,
     pub sampling_points: Option<Vec<[usize; 2]>>,
 }
 

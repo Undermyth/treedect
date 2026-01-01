@@ -77,14 +77,61 @@ pub fn update_drag_and_zoom(
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum LayerImage {
+    RGBAImage(image::RgbaImage),
+    RGBImage(image::RgbImage),
+    EguiImage(egui::ColorImage),
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct RGBPixel {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+}
+
+impl LayerImage {
+    pub fn get_pixel(&self, x: usize, y: usize) -> RGBPixel {
+        match self {
+            LayerImage::RGBAImage(image) => {
+                let pixel = &image[(x as u32, y as u32)];
+                RGBPixel {
+                    r: pixel[0],
+                    g: pixel[1],
+                    b: pixel[2],
+                }
+            }
+            LayerImage::RGBImage(image) => {
+                let pixel = &image[(x as u32, y as u32)];
+                RGBPixel {
+                    r: pixel[0],
+                    g: pixel[1],
+                    b: pixel[2],
+                }
+            }
+            LayerImage::EguiImage(image) => {
+                let pixel = &image[(x, y)];
+                RGBPixel {
+                    r: pixel.r(),
+                    g: pixel.g(),
+                    b: pixel.b(),
+                }
+            }
+        }
+    }
+}
+
 /// 单个图层结构
 pub struct Layer {
     pub name: String,
     pub visible: bool,
     pub opacity: f32, // 0.0 - 1.0
-    pub raw_image: Option<image::RgbaImage>,
-    // 原始 CPU 数据，用于后续可能的像素操作
-    pub image_data: egui::ColorImage,
+    /// raw image is **read only**. Once the image is uploaded to GPU,
+    /// the texture is directly handled by `texture` handler.
+    /// for image layer, the ownership will be transfered to global state,
+    /// and `raw_image` will be set to `None` soon after creation.
+    pub raw_image: Option<LayerImage>,
     // GPU 纹理句柄
     texture: Option<egui::TextureHandle>,
     // below for editable layers. If the layer is not editable, palette
@@ -110,8 +157,7 @@ impl Layer {
             name: name.to_owned(),
             visible: true,
             opacity: 1.0,
-            raw_image: None,
-            image_data,
+            raw_image: Some(LayerImage::EguiImage(image_data)),
             texture: None,
             editable: false,
         }
@@ -127,16 +173,13 @@ impl Layer {
         let layer = tokio::task::spawn_blocking(move || {
             let path = std::path::Path::new(&path);
             let image = image::ImageReader::open(path)?.decode()?;
-            let size = [image.width() as _, image.height() as _];
-            let image_buffer = image.to_rgba8();
-            let pixels = image_buffer.as_flat_samples();
-            let raw_image = image_buffer.clone();
+            let image_buffer = image.to_rgb8();
             Ok::<Self, Box<dyn std::error::Error + Send + Sync>>(Self {
                 name: name.to_owned(),
                 visible: true,
                 opacity: 1.0,
-                raw_image: Some(raw_image),
-                image_data: egui::ColorImage::from_rgba_premultiplied(size, pixels.as_slice()),
+                raw_image: Some(LayerImage::RGBImage(image_buffer)),
+                // image_data: egui::ColorImage::from_rgba_premultiplied(size, pixels.as_slice()),
                 texture: None,
                 editable: false,
             })
@@ -217,8 +260,7 @@ impl Layer {
             name: "sampling points".to_string(),
             visible: true,
             opacity: 1.0,
-            raw_image: None,
-            image_data,
+            raw_image: Some(LayerImage::EguiImage(image_data)),
             texture: None,
             editable: false,
         }
@@ -226,14 +268,49 @@ impl Layer {
 
     /// 确保纹理已上传到 GPU
     pub fn texture_id(&mut self, ctx: &egui::Context) -> egui::TextureId {
+        let egui_image_data = if let Some(LayerImage::RGBImage(image_buffer)) = &self.raw_image {
+            egui::ColorImage::from_rgb(
+                [
+                    image_buffer.width() as usize,
+                    image_buffer.height() as usize,
+                ],
+                image_buffer.as_flat_samples().as_slice(),
+            )
+        } else if let Some(LayerImage::RGBAImage(image_buffer)) = &self.raw_image {
+            egui::ColorImage::from_rgba_premultiplied(
+                [
+                    image_buffer.width() as usize,
+                    image_buffer.height() as usize,
+                ],
+                image_buffer.as_flat_samples().as_slice(),
+            )
+        } else if let Some(LayerImage::EguiImage(image_buffer)) = &self.raw_image {
+            image_buffer.clone()
+        } else {
+            egui::ColorImage::example() // when raw_image is None, return a default ColorImage
+        };
         self.texture
             .get_or_insert_with(|| {
-                ctx.load_texture(&self.name, self.image_data.clone(), Default::default())
+                ctx.load_texture(&self.name, egui_image_data, Default::default())
             })
             .id()
     }
 
     pub fn get_image_size(&self) -> [usize; 2] {
-        self.image_data.size
+        if let Some(LayerImage::RGBImage(image_buffer)) = &self.raw_image {
+            [
+                image_buffer.width() as usize,
+                image_buffer.height() as usize,
+            ]
+        } else if let Some(LayerImage::RGBAImage(image_buffer)) = &self.raw_image {
+            [
+                image_buffer.width() as usize,
+                image_buffer.height() as usize,
+            ]
+        } else if let Some(LayerImage::EguiImage(image_buffer)) = &self.raw_image {
+            image_buffer.size
+        } else {
+            [0, 0]
+        }
     }
 }

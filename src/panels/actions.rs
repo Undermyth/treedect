@@ -5,6 +5,7 @@ use std::sync::mpsc::Sender;
 use crate::models::batcher::SAM2Batcher;
 use crate::models::dinov2::Dinov2Model;
 use crate::models::sam2::SAM2Model;
+use crate::panels::canvas;
 use crate::panels::global;
 
 static MODEL2FILENAME: Map<&'static str, &'static str> = phf_map! {
@@ -150,14 +151,14 @@ pub fn grid_sampling_action(interval: usize, width: usize, height: usize) -> Vec
 
 pub fn filter_sampling_action(
     sampling_points: &mut Vec<[usize; 2]>,
-    image: &egui::ColorImage,
+    image: &canvas::LayerImage,
 ) -> Vec<[usize; 2]> {
     sampling_points
         .iter()
         .filter(|point| {
             let [x, y] = point;
-            let pixel = image[(*x, *y)];
-            let avg_rgb = (pixel.r() as u32 + pixel.g() as u32 + pixel.b() as u32) / 3;
+            let pixel = image.get_pixel(*x, *y);
+            let avg_rgb = (pixel.r as u32 + pixel.g as u32 + pixel.b as u32) / 3;
 
             // Check if the point is bright enough
             if avg_rgb < 60 {
@@ -165,9 +166,9 @@ pub fn filter_sampling_action(
             }
 
             // Check if the point is roughly green (green component should be significantly higher than red and blue)
-            let r = pixel.r() as u32;
-            let g = pixel.g() as u32;
-            let b = pixel.b() as u32;
+            let r = pixel.r as u32;
+            let g = pixel.g as u32;
+            let b = pixel.b as u32;
 
             // Green should be the dominant color
             g > r && g > b
@@ -179,23 +180,24 @@ pub fn filter_sampling_action(
 pub fn segment_action(global: &mut global::GlobalState) {
     // let x = ndarray::Array4::<f32>::zeros((3, 3, 3, 3));
     // log::info!("{}", x);
-    if let Some(sampling_points) = global.sampling_points.clone() {
-        if let Some(raw_image) = &global.raw_image {
-            let batcher = SAM2Batcher::new(
-                global.params.batch_size,
-                global.params.segment_rel as usize,
-                sampling_points,
-                raw_image,
-            );
-            let mut iter = batcher.into_iter();
-            let batch = iter.next().unwrap();
-            let shape = batch.shape();
-            log::info!("batch: {shape:?}");
-            // for batch in batcher.into_iter() {
-            //     let shape = batch.shape();
-            //     log::info!("batch: {shape:?}");
-            //     continue;
-            // }
-        }
+    let sampling_points = global.sampling_points.clone().unwrap();
+    let raw_image = global.raw_image.as_ref().unwrap();
+    if let canvas::LayerImage::RGBImage(image) = raw_image {
+        let batcher = SAM2Batcher::new(
+            global.params.batch_size,
+            global.params.segment_rel as usize,
+            sampling_points,
+            image,
+        );
+        let mut iter = batcher.into_iter();
+        let batch = iter.next().unwrap();
+        let shape = batch.shape();
+        log::info!("batch: {shape:?}");
     }
+
+    // for batch in batcher.into_iter() {
+    //     let shape = batch.shape();
+    //     log::info!("batch: {shape:?}");
+    //     continue;
+    // }
 }

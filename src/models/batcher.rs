@@ -1,6 +1,8 @@
-use image::RgbaImage;
-use image::{GenericImageView, imageops};
-use ndarray::{Array1, Array4};
+use fast_image_resize as fr;
+use fast_image_resize::images::Image;
+use image::RgbImage;
+use image::{DynamicImage, GenericImageView};
+use ndarray::{Array1, Array3, Array4, s};
 
 pub struct SAM2Batcher<'a> {
     idx: usize,
@@ -8,7 +10,7 @@ pub struct SAM2Batcher<'a> {
     patch_size: usize,
     model_rel: usize, // resolution of SAM2 model, default to 1024
     sampling_points: Vec<[usize; 2]>,
-    raw_image: &'a RgbaImage,
+    raw_image: &'a RgbImage,
     mean: Array1<f32>,
     std: Array1<f32>,
 }
@@ -18,7 +20,7 @@ impl<'a> SAM2Batcher<'a> {
         batch_size: usize,
         patch_size: usize,
         sampling_points: Vec<[usize; 2]>,
-        raw_image: &'a RgbaImage,
+        raw_image: &'a RgbImage,
     ) -> Self {
         Self {
             idx: 0,
@@ -42,10 +44,8 @@ impl<'a> Iterator for SAM2Batcher<'a> {
         let start_idx = self.idx;
         let end_idx = (self.idx + self.batch_size).min(self.sampling_points.len());
         let actual_batch_size = end_idx - start_idx;
-        let start_time = std::time::Instant::now();
-        let mut batch = Array4::<f32>::default((actual_batch_size, self.model_rel, self.model_rel, 3));
-        let allocate_time = start_time.elapsed();
-        log::info!("Allocate time: {:?}", allocate_time);
+        let mut batch =
+            Array4::<f32>::uninit((actual_batch_size, self.model_rel, self.model_rel, 3));
         for i in start_idx..end_idx {
             let [x, y] = self.sampling_points[i];
             let start_x = x.saturating_sub(self.patch_size / 2);
@@ -61,31 +61,30 @@ impl<'a> Iterator for SAM2Batcher<'a> {
                     (end_y - start_y) as u32,
                 )
                 .to_image();
-            let start_time = std::time::Instant::now();
-            let patch = imageops::resize(
-                &patch,
+            let patch = DynamicImage::ImageRgb8(patch);
+            let mut dst_image = Image::new(
                 self.model_rel as u32,
                 self.model_rel as u32,
-                image::imageops::FilterType::Nearest, // TODO: or CatmullRom?
+                fr::PixelType::U8x3,
             );
-            let resize_time = start_time.elapsed();
-            log::info!("Resize time: {:?}", resize_time);
-            let start_time = std::time::Instant::now();
-            for x in 0..self.patch_size {
-                for y in 0..self.patch_size {
-                    for c in 0..3 {
-                        batch[[i - start_idx, x, y, c]] = patch.get_pixel(x as u32, y as u32)[c] as f32 / 255.0;
-                    }
-                }
-            }
-            let process_time = start_time.elapsed();
-            log::info!("Process time: {:?}", process_time);
+            let mut resizer = fr::Resizer::new();
+            let _ = resizer.resize(&patch, &mut dst_image, None);
+            let shape = (self.model_rel, self.model_rel, 3);
+            let mut sample = Array3::from_shape_vec(
+                shape,
+                dst_image.into_vec().into_iter().map(|b| b as f32).collect(),
+            )
+            .unwrap();
+            sample = (sample - self.mean.to_shape([1, 1, 3]).unwrap())
+                / self.std.to_shape([1, 1, 3]).unwrap();
+            sample
+                .slice(s![.., .., ..])
+                .assign_to(batch.slice_mut(s![i - start_idx, .., .., ..]));
         }
-        batch = (batch - self.mean.to_shape([1, 1, 1, 3]).unwrap())
-            / self.std.to_shape([1, 1, 1, 3]).unwrap();
-        batch = batch.permuted_axes([0, 3, 1, 2]).to_owned();
         self.idx += actual_batch_size;
-        log::info!("{}", self.idx);
-        return Some(batch);
+        log::info!("Proceeding batch {}", self.idx);
+        unsafe {
+            return Some(batch.assume_init().permuted_axes([0, 3, 1, 2]).to_owned());
+        }
     }
 }
