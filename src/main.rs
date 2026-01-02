@@ -9,6 +9,7 @@ mod panels;
 fn main() -> eframe::Result {
     env_logger::init();
     log::info!("Treedect by egui");
+    log::info!("ONNX Runtime version: {}", ort::MINOR_VERSION);
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([1440.0, 800.0]),
         ..Default::default()

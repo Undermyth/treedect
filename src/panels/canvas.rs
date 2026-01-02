@@ -268,6 +268,9 @@ impl Layer {
 
     /// 确保纹理已上传到 GPU
     pub fn texture_id(&mut self, ctx: &egui::Context) -> egui::TextureId {
+        if let Some(texture) = &self.texture {
+            return texture.id();
+        }
         let egui_image_data = if let Some(LayerImage::RGBImage(image_buffer)) = &self.raw_image {
             egui::ColorImage::from_rgb(
                 [

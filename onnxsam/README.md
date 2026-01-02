@@ -9,6 +9,16 @@ ONNX exportation is very sensitive to environment, so it's recommended to have a
 ### SAM2 ONNX Exportation
 The export script of SAM2 is borrowed from [samexporter](https://github.com/vietanhdev/samexporter). Exporting SAM2 requires installing the SAM2 repo as editable. It is recommended to clone the SAM2 repo and use `pip install -e .` for installation. To control the torch version, you can remove the version constraint in `pyproject.toml` and `setup.py`. Also we have to sightly modify the code in SAM2 for ONNX exportation on CPU to work properly on Windows. All the modifications are in `sam2.patch`. You can apply the patch with `git apply ../sam2.patch` in the root directory of SAM2.
 
+#### Float16 Support
+To further support exporting the model to Float16, there will be even more limitations on the environment, so it's strongly recommended to have a dedicated environment. Specifically, we'll need 
+```bash
+onnx == 1.18.0
+numpy == 2.2.6
+onnxruntime == 1.23.2
+onnxconverter_common == 1.13.0
+```
+Since quantized model is much faster, it's very recommended to use the Float16 version. The version on [Hugging Face](https://huggingface.co/Activator/vision_onnx) is already quantized to Float16.
+
 The example ONNX exportation command is as follows:
 ```python
 python .\export_sam2.py --checkpoint facebook/sam2-hiera-small --output_encoder output_models/sam2_hiera_small.encoder.onnx --output_decoder output_models/sam2_hiera_small.decoder.onnx --model_type sam2_hiera_small --opset 18

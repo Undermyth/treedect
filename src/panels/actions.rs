@@ -61,9 +61,19 @@ pub fn load_segment_model_action(global: &mut global::GlobalState) {
         initialize = true;
         global.ort_initialized = true;
     }
-    let result = SAM2Model::from_path(&encoder_path, &decoder_path, initialize);
-    if let Ok(model) = result {
-        global.segment_model = Some(model);
+    let result = SAM2Model::from_path(
+        global.params.segment_rel as usize,
+        &encoder_path,
+        &decoder_path,
+        initialize,
+    );
+    match result {
+        Ok(model) => {
+            global.segment_model = Some(model);
+        }
+        Err(e) => {
+            log::error!("Error: {e}");
+        }
     }
 }
 
@@ -178,8 +188,6 @@ pub fn filter_sampling_action(
 }
 
 pub fn segment_action(global: &mut global::GlobalState) {
-    // let x = ndarray::Array4::<f32>::zeros((3, 3, 3, 3));
-    // log::info!("{}", x);
     let sampling_points = global.sampling_points.clone().unwrap();
     let raw_image = global.raw_image.as_ref().unwrap();
     if let canvas::LayerImage::RGBImage(image) = raw_image {
@@ -189,15 +197,20 @@ pub fn segment_action(global: &mut global::GlobalState) {
             sampling_points,
             image,
         );
-        let mut iter = batcher.into_iter();
-        let batch = iter.next().unwrap();
-        let shape = batch.shape();
-        log::info!("batch: {shape:?}");
+        for batch in batcher.into_iter() {
+            let start_time = std::time::Instant::now();
+            let result = global.segment_model.as_mut().unwrap().forward(batch);
+            match result {
+                Ok(result) => {
+                    let shape = result.shape();
+                    log::info!("result image embed: {shape:?}");
+                }
+                Err(e) => {
+                    log::error!("Error: {e}");
+                }
+            }
+            let end_time = std::time::Instant::now();
+            log::info!("Inference time taken: {:?}", end_time - start_time);
+        }
     }
-
-    // for batch in batcher.into_iter() {
-    //     let shape = batch.shape();
-    //     log::info!("batch: {shape:?}");
-    //     continue;
-    // }
 }

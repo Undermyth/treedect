@@ -10,6 +10,9 @@ from sam2.build_sam import build_sam2
 from sam2.modeling.sam2_base import SAM2Base
 from sam2.sam2_image_predictor import SAM2ImagePredictor
 
+from onnxconverter_common import float16
+from onnxconverter_common.auto_mixed_precision import auto_convert_mixed_precision
+
 
 class SAM2ImageEncoder(nn.Module):
     def __init__(self, sam_model: SAM2Base) -> None:
@@ -19,6 +22,7 @@ class SAM2ImageEncoder(nn.Module):
         self.no_mem_embed = sam_model.no_mem_embed
 
     def forward(self, x: torch.Tensor) -> tuple[Any, Any, Any]:
+        batch_size = x.shape[0]
         backbone_out = self.image_encoder(x)
         backbone_out["backbone_fpn"][0] = self.model.sam_mask_decoder.conv_s0(
             backbone_out["backbone_fpn"][0]
@@ -41,7 +45,7 @@ class SAM2ImageEncoder(nn.Module):
         vision_feats[-1] = vision_feats[-1] + self.no_mem_embed
 
         feats = [
-            feat.permute(1, 2, 0).reshape(1, -1, *feat_size)
+            feat.permute(1, 2, 0).reshape(batch_size, -1, *feat_size)
             for feat, feat_size in zip(vision_feats[::-1], feat_sizes[::-1])
         ][::-1]
 
@@ -65,12 +69,13 @@ class SAM2ImageDecoder(nn.Module):
         high_res_feats_1: torch.Tensor,
         point_coords: torch.Tensor,
         point_labels: torch.Tensor,
-        mask_input: torch.Tensor,
-        has_mask_input: torch.Tensor,
+        # mask_input: torch.Tensor,
+        # has_mask_input: torch.Tensor,
     ):
         sparse_embedding = self._embed_points(point_coords, point_labels)
         self.sparse_embedding = sparse_embedding
-        dense_embedding = self._embed_masks(mask_input, has_mask_input)
+        dense_embedding = self.prompt_encoder.no_mask_embed.weight.reshape(1, -1, 1, 1)
+        # dense_embedding = self._embed_masks(mask_input, has_mask_input)
 
         high_res_feats = [high_res_feats_0, high_res_feats_1]
         image_embed = image_embed
@@ -191,6 +196,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     input_size = (1024, 1024)
+    batch_size = 2
     multimask_output = True
     model_type = args.model_type
     if model_type == "sam2_hiera_tiny":
@@ -224,6 +230,14 @@ if __name__ == "__main__":
     print("Simplifying encoder...")
     onnx_model = onnx.load(args.output_encoder)
     model_simp, check = simplify(onnx_model)
+    model_simp = float16.convert_float_to_float16(model_simp, keep_io_types=True)
+    # model_simp = auto_convert_mixed_precision(
+    #     model_simp,
+    #     {"image": img.numpy()},
+    #     rtol=0.01,
+    #     atol=0.001,
+    #     keep_io_types=True,
+    # )
     assert check, "Simplified ONNX model could not be validated"
     onnx.save(model_simp, args.output_encoder)
     print("Saved simplified encoder to", args.output_encoder)
@@ -244,8 +258,8 @@ if __name__ == "__main__":
         low=0, high=input_size[1], size=(1, 5, 2), dtype=torch.float
     )
     point_labels = torch.randint(low=0, high=1, size=(1, 5), dtype=torch.float)
-    mask_input = torch.randn(1, 1, *mask_input_size, dtype=torch.float)
-    has_mask_input = torch.tensor([1], dtype=torch.float)
+    # mask_input = torch.randn(1, 1, *mask_input_size, dtype=torch.float)
+    # has_mask_input = torch.tensor([1], dtype=torch.float)
     orig_im_size = torch.tensor(
         [input_size[0], input_size[1]], dtype=torch.float
     )
@@ -256,9 +270,10 @@ if __name__ == "__main__":
         high_res_feats_1,
         point_coords,
         point_labels,
-        mask_input,
-        has_mask_input,
+        # mask_input,
+        # has_mask_input,
     )
+    print(masks, scores.shape)
 
     pathlib.Path(args.output_decoder).parent.mkdir(parents=True, exist_ok=True)
     torch.onnx.export(
@@ -269,8 +284,8 @@ if __name__ == "__main__":
             high_res_feats_1,
             point_coords,
             point_labels,
-            mask_input,
-            has_mask_input,
+            # mask_input,
+            # has_mask_input,
         ),
         args.output_decoder,
         export_params=True,
@@ -282,21 +297,35 @@ if __name__ == "__main__":
             "high_res_feats_1",
             "point_coords",
             "point_labels",
-            "mask_input",
-            "has_mask_input",
+            # "mask_input",
+            # "has_mask_input",
         ],
         output_names=["masks", "iou_predictions"],
         dynamic_axes={
             "point_coords": {0: "num_labels", 1: "num_points"},
             "point_labels": {0: "num_labels", 1: "num_points"},
-            "mask_input": {0: "num_labels"},
-            "has_mask_input": {0: "num_labels"},
+            # "mask_input": {0: "num_labels"},
+            # "has_mask_input": {0: "num_labels"},
         },
     )
     print("Saved decoder to", args.output_decoder)
     print("Simplifying decoder...")
     onnx_model = onnx.load(args.output_decoder)
     model_simp, check = simplify(onnx_model)
+    model_simp = float16.convert_float_to_float16(model_simp, keep_io_types=True)
+    # model_simp = auto_convert_mixed_precision(
+    #     model_simp,
+    #     {
+    #         "image_embed": image_embed.numpy(),
+    #         "high_res_feats_0": high_res_feats_0.numpy(),
+    #         "high_res_feats_1": high_res_feats_1.numpy(),
+    #         "point_coords": point_coords.numpy(),
+    #         "point_labels": point_labels.numpy(),
+    #     },
+    #     rtol=0.01,
+    #     atol=0.001,
+    #     keep_io_types=True,
+    # )
     assert check, "Simplified ONNX model could not be validated"
     onnx.save(model_simp, args.output_decoder)
     print("Saved simplified decoder to", args.output_decoder)
