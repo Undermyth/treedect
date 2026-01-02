@@ -1,3 +1,4 @@
+from humanfriendly.terminal import output
 import time
 from typing import Any
 
@@ -203,6 +204,16 @@ class SAM2ImageDecoder:
             point_labels,
         )
 
+        # # Convert all outputs of prepare_inputs to float32 and save to npy files
+        # inputs = [inp.astype(np.float32) for inp in inputs]
+
+        # # Save each input to a separate npy file for debugging
+        # for i, inp in enumerate(inputs):
+        #     np.save(f"input_{i}.npy", inp)
+
+        print(inputs[0].shape)
+        print(inputs[0])
+
         outputs = self.infer(inputs)
 
         return self.process_output(outputs)
@@ -221,16 +232,16 @@ class SAM2ImageDecoder:
         )
 
         num_labels = input_point_labels.shape[0]
-        mask_input = np.zeros(
-            (
-                num_labels,
-                1,
-                self.encoder_input_size[0] // self.scale_factor,
-                self.encoder_input_size[1] // self.scale_factor,
-            ),
-            dtype=np.float32,
-        )
-        has_mask_input = np.array([0], dtype=np.float32)
+        # mask_input = np.zeros(
+        #     (
+        #         num_labels,
+        #         1,
+        #         self.encoder_input_size[0] // self.scale_factor,
+        #         self.encoder_input_size[1] // self.scale_factor,
+        #     ),
+        #     dtype=np.float32,
+        # )
+        # has_mask_input = np.array([0], dtype=np.float32)
 
         return (
             image_embed,
@@ -238,8 +249,8 @@ class SAM2ImageDecoder:
             high_res_feats_1,
             input_point_coords,
             input_point_labels,
-            mask_input,
-            has_mask_input,
+            # mask_input,
+            # has_mask_input,
         )
 
     def prepare_points(
@@ -307,6 +318,11 @@ class SAM2ImageDecoder:
 
         # Select the best masks based on the scores
         best_mask = masks[np.argmax(scores)]
+        print(best_mask.shape)
+        for i in range(best_mask.shape[0]):
+            for j in range(best_mask.shape[1]):
+                if i == 100:
+                    print(i, j, best_mask[i, j])
         best_mask = cv2.resize(
             best_mask, (self.orig_im_size[1], self.orig_im_size[0])
         )

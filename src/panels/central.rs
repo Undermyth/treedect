@@ -1,5 +1,6 @@
 use eframe::{egui, epaint};
 
+use crate::panels::actions;
 use crate::panels::canvas;
 use crate::panels::global;
 
@@ -67,6 +68,41 @@ impl Canvas {
                 egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), // UV 坐标
                 tint,
             );
+        }
+
+        // 4. 注册右键菜单
+        response.context_menu(|ui| {
+            ui.label("Canvas Menu");
+            if ui.button("Delete Selection").clicked() {
+                global.layers[2].remove_segment_at(global.select_pos);
+            }
+            if ui.button("Segment Here").clicked() {
+                global.sampling_points = Some(vec![global.select_pos]);
+                actions::segment_action(global, None);
+                global.layers[2].rerender();
+            }
+            if ui.button("Reset View").clicked() {
+                global.canvas_state.offset = egui::Vec2::ZERO;
+                global.canvas_state.scale = 1.0;
+                ui.close();
+            }
+            if ui.button("Zoom In").clicked() {
+                global.canvas_state.scale *= 1.2;
+                ui.close();
+            }
+            if ui.button("Zoom Out").clicked() {
+                global.canvas_state.scale *= 0.8;
+                ui.close();
+            }
+        });
+
+        // 记录右键点击坐标
+        if response.secondary_clicked() {
+            let pos = response.interact_pointer_pos().unwrap_or_default();
+            let canvas_pos = pos - response.rect.min;
+            let canvas_pos = (canvas_pos - global.canvas_state.offset) / global.canvas_state.scale;
+            global.select_pos = [canvas_pos.x as usize, canvas_pos.y as usize];
+            log::info!("Selected at {:?}", global.select_pos);
         }
     }
 }

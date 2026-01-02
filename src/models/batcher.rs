@@ -66,11 +66,17 @@ impl<'a> Iterator for SAM2Batcher<'a> {
         let mut coordinates = Array2::<usize>::uninit((actual_batch_size, 2));
         for i in start_idx..end_idx {
             let [x, y] = self.sampling_points[i];
-            let start_x = x.saturating_sub(self.patch_size / 2);
-            let start_y = y.saturating_sub(self.patch_size / 2);
+            let mut start_x = x.saturating_sub(self.patch_size / 2);
+            let mut start_y = y.saturating_sub(self.patch_size / 2);
             let end_x = (start_x + self.patch_size).min(self.raw_image.width() as usize);
             let end_y = (start_y + self.patch_size).min(self.raw_image.height() as usize);
-            array![start_x, start_y]
+            if end_x == self.raw_image.width() as usize {
+                start_x = end_x - self.patch_size;
+            }
+            if end_y == self.raw_image.height() as usize {
+                start_y = end_y - self.patch_size;
+            }
+            array![start_y, start_x]
                 .view()
                 .assign_to(coordinates.slice_mut(s![i - start_idx, ..]));
             array![(y - start_y) as f32, (x - start_x) as f32]
@@ -99,14 +105,14 @@ impl<'a> Iterator for SAM2Batcher<'a> {
                 dst_image.into_vec().into_iter().map(|b| b as f32).collect(),
             )
             .unwrap();
-            sample = (sample - self.mean.to_shape([1, 1, 3]).unwrap())
+            sample = (sample / 255.0 - self.mean.to_shape([1, 1, 3]).unwrap())
                 / self.std.to_shape([1, 1, 3]).unwrap();
             sample
                 .view()
                 .assign_to(batch.slice_mut(s![i - start_idx, .., .., ..]));
         }
         self.idx += actual_batch_size;
-        log::info!("Proceeding batch to {}", self.idx);
+        // log::info!("Proceeding batch to {}", self.idx);
         unsafe {
             return Some(SAM2Batch {
                 image: batch

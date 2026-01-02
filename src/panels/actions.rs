@@ -1,4 +1,5 @@
 use eframe::egui;
+use indicatif::ProgressBar;
 use phf::{Map, phf_map};
 use std::sync::mpsc::Sender;
 
@@ -187,9 +188,14 @@ pub fn filter_sampling_action(
         .collect()
 }
 
-pub fn segment_action(global: &mut global::GlobalState) {
+pub fn segment_action(global: &mut global::GlobalState, palette: Option<&mut canvas::Palette>) {
+    let mut palette = match palette {
+        Some(palette) => palette,
+        None => global.layers[2].palette.as_mut().unwrap(),
+    };
     let sampling_points = global.sampling_points.clone().unwrap();
     let raw_image = global.raw_image.as_ref().unwrap();
+    let bar = ProgressBar::new(sampling_points.len() as u64);
     if let canvas::LayerImage::RGBImage(image) = raw_image {
         let batcher = SAM2Batcher::new(
             global.params.batch_size,
@@ -197,20 +203,33 @@ pub fn segment_action(global: &mut global::GlobalState) {
             sampling_points,
             image,
         );
+        bar.set_style(
+            indicatif::ProgressStyle::with_template(
+                "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len}",
+            )
+            .unwrap(),
+        );
+        bar.set_prefix("Segmenting");
         for batch in batcher.into_iter() {
-            let start_time = std::time::Instant::now();
+            // let start_time = std::time::Instant::now();
+            let actual_batch_size = batch.image.shape()[0];
             let result = global.segment_model.as_mut().unwrap().forward(batch);
             match result {
                 Ok(result) => {
-                    let shape = result.shape();
-                    log::info!("result image embed: {shape:?}");
+                    global
+                        .segment_model
+                        .as_ref()
+                        .unwrap()
+                        .decode_mask_to_palette(&result, &mut palette);
                 }
                 Err(e) => {
                     log::error!("Error: {e}");
                 }
             }
-            let end_time = std::time::Instant::now();
-            log::info!("Inference time taken: {:?}", end_time - start_time);
+            bar.inc(actual_batch_size as u64);
+            // let end_time = std::time::Instant::now();
+            // log::info!("Inference time taken: {:?}", end_time - start_time);
         }
+        bar.finish();
     }
 }

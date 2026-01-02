@@ -230,7 +230,7 @@ if __name__ == "__main__":
     print("Simplifying encoder...")
     onnx_model = onnx.load(args.output_encoder)
     model_simp, check = simplify(onnx_model)
-    model_simp = float16.convert_float_to_float16(model_simp, keep_io_types=True)
+    # model_simp = float16.convert_float_to_float16(model_simp, keep_io_types=True)
     # model_simp = auto_convert_mixed_precision(
     #     model_simp,
     #     {"image": img.numpy()},
@@ -312,7 +312,7 @@ if __name__ == "__main__":
     print("Simplifying decoder...")
     onnx_model = onnx.load(args.output_decoder)
     model_simp, check = simplify(onnx_model)
-    model_simp = float16.convert_float_to_float16(model_simp, keep_io_types=True)
+    # model_simp = float16.convert_float_to_float16(model_simp, keep_io_types=True)
     # model_simp = auto_convert_mixed_precision(
     #     model_simp,
     #     {

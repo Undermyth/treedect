@@ -1,4 +1,8 @@
 use eframe::egui;
+use ndarray::Array2;
+use rand::Rng;
+
+static MAX_PALETTE_SIZE: usize = 1024;
 
 /// 画布状态，用于管理平移和缩放
 pub struct CanvasState {
@@ -91,6 +95,12 @@ pub struct RGBPixel {
     pub b: u8,
 }
 
+impl RGBPixel {
+    pub fn default() -> Self {
+        Self { r: 0, g: 0, b: 0 }
+    }
+}
+
 impl LayerImage {
     pub fn get_pixel(&self, x: usize, y: usize) -> RGBPixel {
         match self {
@@ -122,6 +132,45 @@ impl LayerImage {
     }
 }
 
+pub struct Palette {
+    pub size: usize,
+    pub num_patches: usize,
+    pub map: Array2<usize>,
+    pub color_map: [RGBPixel; MAX_PALETTE_SIZE],
+}
+
+impl Palette {
+    pub fn new(size: usize) -> Self {
+        let mut rng = rand::rng();
+        let mut color_map = [RGBPixel::default(); MAX_PALETTE_SIZE];
+        for i in 0..MAX_PALETTE_SIZE {
+            color_map[i].r = rng.random_range(0..255);
+            color_map[i].g = rng.random_range(0..127);
+            color_map[i].b = rng.random_range(0..255);
+        }
+        Self {
+            size,
+            num_patches: 0,
+            map: Array2::zeros([size, size]),
+            color_map,
+        }
+    }
+    pub fn to_image(&self) -> LayerImage {
+        let mut image_data =
+            egui::ColorImage::filled([self.size, self.size], egui::Color32::TRANSPARENT);
+        for ((y, x), index) in self.map.indexed_iter() {
+            if *index != 0 {
+                image_data[(x, y)] = egui::Color32::from_rgb(
+                    self.color_map[*index].r,
+                    self.color_map[*index].g,
+                    self.color_map[*index].b,
+                );
+            }
+        }
+        LayerImage::EguiImage(image_data)
+    }
+}
+
 /// 单个图层结构
 pub struct Layer {
     pub name: String,
@@ -137,6 +186,7 @@ pub struct Layer {
     // below for editable layers. If the layer is not editable, palette
     // and other data structure will not be maintained.
     pub editable: bool,
+    pub palette: Option<Palette>,
 }
 
 impl Layer {
@@ -160,6 +210,7 @@ impl Layer {
             raw_image: Some(LayerImage::EguiImage(image_data)),
             texture: None,
             editable: false,
+            palette: None,
         }
     }
 
@@ -182,11 +233,25 @@ impl Layer {
                 // image_data: egui::ColorImage::from_rgba_premultiplied(size, pixels.as_slice()),
                 texture: None,
                 editable: false,
+                palette: None,
             })
         })
         .await??;
 
         Ok(layer)
+    }
+
+    pub fn from_palette(name: String, palette: Palette) -> Self {
+        let image = palette.to_image();
+        Self {
+            name,
+            visible: true,
+            opacity: 1.0,
+            raw_image: Some(image),
+            texture: None,
+            editable: true,
+            palette: Some(palette),
+        }
     }
 
     fn cpu_draw_circle(
@@ -263,6 +328,43 @@ impl Layer {
             raw_image: Some(LayerImage::EguiImage(image_data)),
             texture: None,
             editable: false,
+            palette: None,
+        }
+    }
+
+    pub fn get_id_at_position(&self, pos: [usize; 2]) -> Option<usize> {
+        if let Some(palette) = &self.palette {
+            let index = palette.map[(pos[1], pos[0])];
+            if index != 0 {
+                return Some(index);
+            } else {
+                return None;
+            }
+        }
+        None
+    }
+
+    pub fn rerender(&mut self) {
+        let new_image = self.palette.as_ref().unwrap().to_image();
+        if let LayerImage::EguiImage(image_data) = new_image {
+            self.texture
+                .as_mut()
+                .unwrap()
+                .set(image_data, egui::TextureOptions::default());
+        }
+    }
+
+    pub fn remove_segment_at(&mut self, pos: [usize; 2]) {
+        let segment_id = self.get_id_at_position(pos);
+        if let Some(segment_id) = segment_id {
+            let new_map = self
+                .palette
+                .as_mut()
+                .unwrap()
+                .map
+                .mapv(|x| if x == segment_id { 0 } else { x });
+            self.palette.as_mut().unwrap().map = new_map;
+            self.rerender();
         }
     }
 

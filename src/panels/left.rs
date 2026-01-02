@@ -98,7 +98,14 @@ impl ActionPanel {
                 ))
                 .clicked()
             {
-                actions::segment_action(global);
+                if let canvas::LayerImage::RGBImage(image) = global.raw_image.as_ref().unwrap() {
+                    let mut palette = canvas::Palette::new(image.width() as usize);
+                    actions::segment_action(global, Some(&mut palette));
+                    global.layers.push(canvas::Layer::from_palette(
+                        "Segmentation Layer".to_string(),
+                        palette,
+                    ));
+                }
             }
         });
     }

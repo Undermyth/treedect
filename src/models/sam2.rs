@@ -1,16 +1,27 @@
-use ndarray::{Array3, ArrayView2, array, s};
-use opencv::{core as cv, prelude::*};
-use ort::execution_providers::WebGPUExecutionProvider;
+use fast_image_resize as fr;
+use ndarray::{Array2, Array3, ArrayView2, Axis, Dimension, Ix4, array, s};
+use ndarray_stats::QuantileExt;
+use ort::execution_providers::{
+    CPUExecutionProvider, DirectMLExecutionProvider, ROCmExecutionProvider, WebGPUExecutionProvider,
+};
 use ort::session::Session;
 use ort::session::builder::GraphOptimizationLevel;
 use ort::value::TensorRef;
 
 use crate::models::batcher;
+use crate::panels::canvas;
 
 pub struct SAM2Model {
     pub encoder_session: Session,
     pub decoder_session: Session,
     pub model_rel: usize,
+    pub mask_threshold: f32,
+}
+
+pub struct SAM2Output {
+    pub mask_logits: Array3<f32>,
+    pub coordinates: Array2<usize>,
+    pub patch_size: usize,
 }
 
 impl SAM2Model {
@@ -21,21 +32,21 @@ impl SAM2Model {
         initialize: bool,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         if initialize {
-            log::info!("Initializing ONNX Runtime with WebGPU execution provider");
+            log::info!("Initializing ONNX Runtime with execution provider");
             ort::init()
-                .with_execution_providers([WebGPUExecutionProvider::default()
+                .with_execution_providers([CPUExecutionProvider::default()
                     .build()
                     .error_on_failure()])
                 .commit()?;
         }
         log::info!("Loading encoder model from: {}", encoder_path);
         let encoder_session = Session::builder()?
-            .with_optimization_level(GraphOptimizationLevel::Level1)?
+            .with_optimization_level(GraphOptimizationLevel::Disable)?
             .with_intra_threads(4)?
             .commit_from_file(encoder_path)?;
         log::info!("Loading decoder model from: {}", decoder_path);
         let decoder_session = Session::builder()?
-            .with_optimization_level(GraphOptimizationLevel::Level1)?
+            .with_optimization_level(GraphOptimizationLevel::Disable)?
             .with_intra_threads(4)?
             .commit_from_file(decoder_path)?;
         log::info!("Successfully loaded both encoder and decoder models");
@@ -43,15 +54,16 @@ impl SAM2Model {
             model_rel,
             encoder_session,
             decoder_session,
+            mask_threshold: 0.0,
         })
     }
 
     pub fn forward(
         &mut self,
         batch_image: batcher::SAM2Batch,
-    ) -> Result<Array3<f32>, Box<dyn std::error::Error>> {
+    ) -> Result<SAM2Output, Box<dyn std::error::Error>> {
         // image encoding
-        let start_time = std::time::Instant::now();
+        // let start_time = std::time::Instant::now();
         let batch_size = batch_image.image.shape()[0];
         let patch_size = batch_image.original_size;
         let input_tensor = TensorRef::from_array_view(&batch_image.image)?;
@@ -64,15 +76,14 @@ impl SAM2Model {
         let image_embed = image_embed.try_extract_array::<f32>()?;
         let high_res_feats_0 = high_res_feats_0.try_extract_array::<f32>()?;
         let high_res_feats_1 = high_res_feats_1.try_extract_array::<f32>()?;
-        let end_time = start_time.elapsed();
-        log::info!("Encoding time taken: {:?}", end_time);
+        // let end_time = start_time.elapsed();
+        // log::info!("Encoding time taken: {:?}", end_time);
 
         // mask decoding
-        let start_time = std::time::Instant::now();
+        // let start_time = std::time::Instant::now();
         let sampling_coords =
             batch_image.sampling_coords / (patch_size as f32) * (self.model_rel as f32);
         let mut masks = Array3::<f32>::uninit([batch_size, patch_size, patch_size]);
-        log::info!("{:?}", image_embed.shape());
         let embedding_shape = [
             1,
             image_embed.shape()[1],
@@ -119,33 +130,70 @@ impl SAM2Model {
                 "point_labels" => point_labels,
             ])?;
 
-            let mask = &output["masks"].try_extract_array::<f32>()?;
-            let mask = mask.slice(s![0, 0, .., ..]);
+            let mask = &output["masks"]
+                .try_extract_array::<f32>()?
+                .into_dimensionality::<Ix4>()?;
+            // let scores = &output["iou_predictions"].try_extract_array::<f32>()?;
+            // let max_index = scores.argmax()?.as_array_view()[1];
 
-            // convert to opencv for resizing and convert back
-            // .to_shape([self.model_rel, self.model_rel, 1])
-            // .unwrap();
-            // let shape: Vec<i32> = mask.shape().iter().map(|&sz| sz as i32).collect();
-            // let (channels, shape) = shape.split_last().unwrap();
-            let mask = mask.as_standard_layout();
-            let mat = cv::Mat::from_slice(mask.as_slice().unwrap())?;
-            let mut scaled_mat = cv::Mat::default();
-            let _ = opencv::imgproc::resize(
-                &mat,
-                &mut scaled_mat,
-                cv::Size::new(patch_size as i32, patch_size as i32),
-                0.0,
-                0.0,
-                0,
-            );
-            let scaled_mask = ArrayView2::from_shape(
-                (patch_size, patch_size),
-                scaled_mat.data_typed::<f32>().unwrap(),
-            )?;
+            let mask: ArrayView2<f32> = mask.slice(s![0, 0, .., ..]);
+
+            let mask = mask.as_standard_layout().into_owned();
+            let (mask_vec, _) = mask.into_raw_vec_and_offset();
+            let mask_bytes: Vec<u8> = bytemuck::cast_slice(&mask_vec).to_vec();
+            let mask_image =
+                fr::images::Image::from_vec_u8(256, 256, mask_bytes, fr::PixelType::F32);
+            let mut scaled_mask =
+                fr::images::Image::new(patch_size as u32, patch_size as u32, fr::PixelType::F32);
+            let mut resizer = fr::Resizer::new();
+            let result = resizer.resize(mask_image.as_ref().unwrap(), &mut scaled_mask, None);
+            if let Err(e) = result {
+                log::error!("Error resizing mask: {:?}", e);
+            }
+            let scaled_mask = scaled_mask.into_vec();
+            let scaled_mask: &[f32] = bytemuck::cast_slice(&scaled_mask);
+            let scaled_mask = scaled_mask.to_vec();
+            let scaled_mask =
+                ArrayView2::from_shape((patch_size, patch_size), scaled_mask.as_slice())?;
             scaled_mask.view().assign_to(masks.slice_mut(s![i, .., ..]));
         }
-        let end_time = start_time.elapsed();
-        log::info!("Decoding time taken: {:?}", end_time);
-        unsafe { Ok(masks.assume_init().to_owned()) }
+        // let end_time = start_time.elapsed();
+        // log::info!("Decoding time taken: {:?}", end_time);
+
+        unsafe {
+            Ok(SAM2Output {
+                mask_logits: masks.assume_init().to_owned(),
+                coordinates: batch_image.coordinates,
+                patch_size: patch_size,
+            })
+        }
+    }
+
+    pub fn decode_mask_to_palette(&self, output: &SAM2Output, palette: &mut canvas::Palette) {
+        for (i, (mask_logit, coordinate)) in output
+            .mask_logits
+            .axis_iter(Axis(0))
+            .zip(output.coordinates.axis_iter(Axis(0)))
+            .enumerate()
+        {
+            let mask = mask_logit.mapv(|x| {
+                (x > self.mask_threshold) as usize * (i + palette.num_patches + 1) as usize
+            });
+            let coord_y = coordinate[0] as usize;
+            let coord_x = coordinate[1] as usize;
+            let patch_size = output.patch_size;
+
+            let mut palette_slice = palette.map.slice_mut(s![
+                coord_y..coord_y + patch_size,
+                coord_x..coord_x + patch_size
+            ]);
+
+            for ((y, x), &mask_val) in mask.indexed_iter() {
+                if mask_val != 0 {
+                    palette_slice[[y, x]] = mask_val as usize;
+                }
+            }
+        }
+        palette.num_patches += output.mask_logits.shape()[0];
     }
 }

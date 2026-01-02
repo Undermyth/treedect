@@ -40,13 +40,13 @@ pub struct Params {
 impl Params {
     pub fn new() -> Self {
         Self {
-            segment_rel: 768,
+            segment_rel: 1024,
             model_dir: "./output_models".to_string(),
             segment_model_name: None,
             classify_model_name: None,
             use_height_sampling: false,
-            grid_sampling_interval: 200,
-            batch_size: 32,
+            grid_sampling_interval: 320,
+            batch_size: 8,
         }
     }
 }
@@ -61,6 +61,7 @@ pub struct GlobalState {
     pub classify_model: Option<Dinov2Model>,
     pub raw_image: Option<canvas::LayerImage>,
     pub sampling_points: Option<Vec<[usize; 2]>>,
+    pub select_pos: [usize; 2],
 }
 
 impl GlobalState {
@@ -75,6 +76,7 @@ impl GlobalState {
             classify_model: None,
             raw_image: None,
             sampling_points: None,
+            select_pos: [0, 0],
         }
     }
 }
