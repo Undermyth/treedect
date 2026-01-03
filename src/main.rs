@@ -7,7 +7,9 @@ mod models;
 mod panels;
 
 fn main() -> eframe::Result {
-    env_logger::init();
+    env_logger::Builder::from_default_env()
+        .filter_level(log::LevelFilter::Info)
+        .init();
     log::info!("Treedect by egui");
     log::info!("ONNX Runtime version: {}", ort::MINOR_VERSION);
     let options = eframe::NativeOptions {
@@ -15,7 +17,7 @@ fn main() -> eframe::Result {
         ..Default::default()
     };
     eframe::run_native(
-        "Egui Layers Example",
+        "treedect(beta)",
         options,
         Box::new(|cc| Ok(Box::new(TreeDectApp::new(cc)))),
     )

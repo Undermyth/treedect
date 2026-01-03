@@ -2,7 +2,7 @@ use fast_image_resize as fr;
 use ndarray::{Array2, Array3, ArrayView2, Axis, Dimension, Ix4, array, s};
 use ndarray_stats::QuantileExt;
 use ort::execution_providers::{
-    CPUExecutionProvider, DirectMLExecutionProvider, ROCmExecutionProvider, WebGPUExecutionProvider,
+    CPUExecutionProvider, CUDAExecutionProvider, ROCmExecutionProvider, WebGPUExecutionProvider,
 };
 use ort::session::Session;
 use ort::session::builder::GraphOptimizationLevel;
@@ -34,7 +34,7 @@ impl SAM2Model {
         if initialize {
             log::info!("Initializing ONNX Runtime with execution provider");
             ort::init()
-                .with_execution_providers([CPUExecutionProvider::default()
+                .with_execution_providers([CUDAExecutionProvider::default()
                     .build()
                     .error_on_failure()])
                 .commit()?;
