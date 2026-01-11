@@ -57,16 +57,13 @@ pub fn load_segment_model_action(global: &mut global::GlobalState) {
         .join(format!("{}.decoder.onnx", model_prefix))
         .to_string_lossy()
         .to_string();
-    let mut initialize = false;
     if !global.ort_initialized {
-        initialize = true;
         global.ort_initialized = true;
     }
     let result = SAM2Model::from_path(
         global.params.segment_rel as usize,
         &encoder_path,
         &decoder_path,
-        initialize,
     );
     match result {
         Ok(model) => {

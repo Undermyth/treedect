@@ -1,19 +1,15 @@
 use fast_image_resize as fr;
-use ndarray::{Array2, Array3, ArrayView2, Axis, Dimension, Ix4, array, s};
-use ndarray_stats::QuantileExt;
-use ort::execution_providers::{
-    CPUExecutionProvider, CUDAExecutionProvider, DirectMLExecutionProvider, ROCmExecutionProvider,
-};
-use ort::session::Session;
-use ort::session::builder::GraphOptimizationLevel;
-use ort::value::TensorRef;
+use ndarray::{Array2, Array3, Array4, ArrayView2, Axis, array, s};
+use numpy::{IntoPyArray, PyArray, PyArray4, PyArrayMethods, ToPyArray};
+use pyo3::ffi::c_str;
+use pyo3::prelude::*;
+use pyo3::types::PyDict;
 
 use crate::models::batcher;
 use crate::panels::canvas;
 
 pub struct SAM2Model {
-    pub encoder_session: Session,
-    pub decoder_session: Session,
+    pub sam2_onnx: Py<PyAny>,
     pub model_rel: usize,
     pub mask_threshold: f32,
 }
@@ -29,31 +25,24 @@ impl SAM2Model {
         model_rel: usize,
         encoder_path: &str,
         decoder_path: &str,
-        initialize: bool,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        if initialize {
-            log::info!("Initializing ONNX Runtime with execution provider");
-            ort::init()
-                .with_execution_providers([DirectMLExecutionProvider::default()
-                    .build()
-                    .error_on_failure()])
-                .commit()?;
-        }
-        log::info!("Loading encoder model from: {}", encoder_path);
-        let encoder_session = Session::builder()?
-            .with_optimization_level(GraphOptimizationLevel::Disable)?
-            .with_intra_threads(4)?
-            .commit_from_file(encoder_path)?;
-        log::info!("Loading decoder model from: {}", decoder_path);
-        let decoder_session = Session::builder()?
-            .with_optimization_level(GraphOptimizationLevel::Disable)?
-            .with_intra_threads(4)?
-            .commit_from_file(decoder_path)?;
-        log::info!("Successfully loaded both encoder and decoder models");
+        let sam2_onnx = Python::attach(|py| {
+            // Add onnxinfer directory to Python path
+            let sys_path = py.import("sys")?.getattr("path")?;
+            sys_path.call_method1("append", ("onnxinfer",))?;
+
+            // Import sam2onnx module and create SAM2ONNX instance
+            let sam2onnx_module = py.import("sam2onnx")?;
+            let sam2onnx_class = sam2onnx_module.getattr("SAM2ONNX")?;
+            let sam2_onnx = sam2onnx_class.call1((encoder_path, decoder_path))?;
+
+            log::info!("Successfully loaded Python SAM2ONNX model");
+            Ok::<Py<PyAny>, Box<dyn std::error::Error>>(sam2_onnx.into())
+        })?;
+
         Ok(Self {
             model_rel,
-            encoder_session,
-            decoder_session,
+            sam2_onnx,
             mask_threshold: 0.0,
         })
     }
@@ -62,25 +51,50 @@ impl SAM2Model {
         &mut self,
         batch_image: batcher::SAM2Batch,
     ) -> Result<SAM2Output, Box<dyn std::error::Error>> {
-        // image encoding
-        // let start_time = std::time::Instant::now();
         let batch_size = batch_image.image.shape()[0];
         let patch_size = batch_image.original_size;
-        let input_tensor = TensorRef::from_array_view(&batch_image.image)?;
-        let output = self
-            .encoder_session
-            .run(ort::inputs!["image" => input_tensor])?;
-        let high_res_feats_0 = &output["high_res_feats_0"];
-        let high_res_feats_1 = &output["high_res_feats_1"];
-        let image_embed = &output["image_embed"];
-        let image_embed = image_embed.try_extract_array::<f32>()?;
-        let high_res_feats_0 = high_res_feats_0.try_extract_array::<f32>()?;
-        let high_res_feats_1 = high_res_feats_1.try_extract_array::<f32>()?;
-        // let end_time = start_time.elapsed();
-        // log::info!("Encoding time taken: {:?}", end_time);
 
-        // mask decoding
-        // let start_time = std::time::Instant::now();
+        // image encoding using Python SAM2ONNX
+        let (image_embed, high_res_feats_0, high_res_feats_1) = Python::attach(|py| {
+            let input_array = batch_image.image.into_pyarray(py);
+            let sam2_onnx = self.sam2_onnx.as_ref();
+
+            // Call encode method
+            let encoded_dict = sam2_onnx.call_method1(py, c_str!("encode"), (input_array,))?;
+            let encoded_dict = encoded_dict.cast_bound::<PyDict>(py).unwrap();
+
+            // Extract features from Python dict and convert to ndarray
+            let high_res_feats_0 = encoded_dict
+                .get_item("high_res_feats_0")
+                .unwrap()
+                .unwrap()
+                .cast_into::<PyArray4<f32>>()
+                .unwrap();
+            let high_res_feats_1 = encoded_dict
+                .get_item("high_res_feats_1")
+                .unwrap()
+                .unwrap()
+                .cast_into::<PyArray4<f32>>()
+                .unwrap();
+            let image_embed = encoded_dict
+                .get_item("image_embedding")
+                .unwrap()
+                .unwrap()
+                .cast_into::<PyArray4<f32>>()
+                .unwrap();
+
+            let high_res_feats_0_array = high_res_feats_0.to_owned_array();
+            let high_res_feats_1_array = high_res_feats_1.to_owned_array();
+            let image_embed_array = image_embed.to_owned_array();
+
+            Ok::<(Array4<f32>, Array4<f32>, Array4<f32>), Box<dyn std::error::Error>>((
+                image_embed_array,
+                high_res_feats_0_array,
+                high_res_feats_1_array,
+            ))
+        })?;
+
+        // mask decoding using Python SAM2ONNX
         let sampling_coords =
             batch_image.sampling_coords / (patch_size as f32) * (self.model_rel as f32);
         let mut masks = Array3::<f32>::uninit([batch_size, patch_size, patch_size]);
@@ -105,38 +119,53 @@ impl SAM2Model {
         for i in 0..batch_size {
             let embedding = image_embed.slice(s![i, .., .., ..]);
             let embedding = embedding.to_shape(embedding_shape).unwrap();
-            let embedding = TensorRef::from_array_view(&embedding)?;
 
             let high_res_0 = high_res_feats_0.slice(s![i, .., .., ..]);
             let high_res_0 = high_res_0.to_shape(high_res_0_shape).unwrap();
-            let high_res_0 = TensorRef::from_array_view(&high_res_0)?;
 
             let high_res_1 = high_res_feats_1.slice(s![i, .., .., ..]);
             let high_res_1 = high_res_1.to_shape(high_res_1_shape).unwrap();
-            let high_res_1 = TensorRef::from_array_view(&high_res_1)?;
 
             let point_coords = sampling_coords.slice(s![i, ..]);
             let point_coords = point_coords.to_shape([1, 1, 2]).unwrap();
-            let point_coords = TensorRef::from_array_view(&point_coords)?;
 
             let point_labels = array![[1 as f32]];
-            let point_labels = TensorRef::from_array_view(&point_labels)?;
 
-            let output = self.decoder_session.run(ort::inputs![
-                "image_embed" => embedding,
-                "high_res_feats_0" => high_res_0,
-                "high_res_feats_1" => high_res_1,
-                "point_coords" => point_coords,
-                "point_labels" => point_labels,
-            ])?;
+            // Call Python decode method
+            let decoded_mask = Python::attach(|py| {
+                let embedding_py = embedding.to_pyarray(py);
+                let high_res_0_py = high_res_0.to_pyarray(py);
+                let high_res_1_py = high_res_1.to_pyarray(py);
+                let point_coords_py = point_coords.to_pyarray(py);
+                let point_labels_py = point_labels.to_pyarray(py);
 
-            let mask = &output["masks"]
-                .try_extract_array::<f32>()?
-                .into_dimensionality::<Ix4>()?;
-            // let scores = &output["iou_predictions"].try_extract_array::<f32>()?;
-            // let max_index = scores.argmax()?.as_array_view()[1];
+                let sam2_onnx = self.sam2_onnx.as_ref();
+                let decoded_dict = sam2_onnx.call_method1(
+                    py,
+                    c_str!("decode"),
+                    (
+                        embedding_py,
+                        high_res_0_py,
+                        high_res_1_py,
+                        point_coords_py,
+                        point_labels_py,
+                    ),
+                )?;
 
-            let mask: ArrayView2<f32> = mask.slice(s![0, 0, .., ..]);
+                let decoded_dict = decoded_dict.cast_bound::<PyDict>(py).unwrap();
+
+                let masks_py = decoded_dict
+                    .get_item("masks")
+                    .unwrap()
+                    .unwrap()
+                    .cast_into::<PyArray4<f32>>()
+                    .unwrap();
+                let masks_array = masks_py.to_owned_array();
+
+                Ok::<Array4<f32>, Box<dyn std::error::Error>>(masks_array)
+            })?;
+
+            let mask: ArrayView2<f32> = decoded_mask.slice(s![0, 0, .., ..]);
 
             let mask = mask.as_standard_layout().into_owned();
             let (mask_vec, _) = mask.into_raw_vec_and_offset();
@@ -157,8 +186,6 @@ impl SAM2Model {
                 ArrayView2::from_shape((patch_size, patch_size), scaled_mask.as_slice())?;
             scaled_mask.view().assign_to(masks.slice_mut(s![i, .., ..]));
         }
-        // let end_time = start_time.elapsed();
-        // log::info!("Decoding time taken: {:?}", end_time);
 
         unsafe {
             Ok(SAM2Output {
