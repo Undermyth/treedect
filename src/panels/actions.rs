@@ -1,18 +1,11 @@
 use eframe::egui;
 use indicatif::ProgressBar;
-use phf::{Map, phf_map};
 use std::sync::mpsc::Sender;
 
 use crate::models::batcher::SAM2Batcher;
-use crate::models::dinov2::Dinov2Model;
-use crate::models::sam2::SAM2Model;
 use crate::panels::canvas;
 use crate::panels::global;
-
-static MODEL2FILENAME: Map<&'static str, &'static str> = phf_map! {
-    "sam2_small" => "sam2_hiera_small",
-    "dinov2_base" => "dinov2_vitb_reg",
-};
+use crate::worker;
 
 pub fn load_image_action(ctx: egui::Context, sender: Sender<String>) {
     let task = rfd::AsyncFileDialog::new()
@@ -46,55 +39,33 @@ pub fn select_model_path_action(sender: Sender<String>) {
 }
 
 pub fn load_segment_model_action(global: &mut global::GlobalState) {
-    let model_prefix = MODEL2FILENAME
-        .get(global.params.segment_model_name.as_deref().unwrap_or(""))
-        .unwrap();
-    let encoder_path = std::path::Path::new(&global.params.model_dir)
-        .join(format!("{}.encoder.onnx", model_prefix))
-        .to_string_lossy()
-        .to_string();
-    let decoder_path = std::path::Path::new(&global.params.model_dir)
-        .join(format!("{}.decoder.onnx", model_prefix))
-        .to_string_lossy()
-        .to_string();
-    let mut initialize = false;
-    if !global.ort_initialized {
-        initialize = true;
-        global.ort_initialized = true;
-    }
-    let result = SAM2Model::from_path(
-        global.params.segment_rel as usize,
-        &encoder_path,
-        &decoder_path,
-        initialize,
-    );
-    match result {
-        Ok(model) => {
-            global.segment_model = Some(model);
-        }
-        Err(e) => {
-            log::error!("Error: {e}");
-        }
-    }
+    let request = worker::LoadTask {
+        model_name: global
+            .params
+            .segment_model_name
+            .as_deref()
+            .unwrap()
+            .to_owned(),
+        model_path: global.params.model_dir.clone(),
+        model_type: worker::ModelType::Segment,
+    };
+    let _result = global.gui_channel.load_req_tx.send(request);
+    let _result = global.gui_channel.load_res_rx.recv();
 }
 
 pub fn load_classify_model_action(global: &mut global::GlobalState) {
-    let model_prefix = MODEL2FILENAME
-        .get(global.params.classify_model_name.as_deref().unwrap_or(""))
-        .unwrap();
-    let model_path = std::path::Path::new(&global.params.model_dir)
-        .join(format!("{}.onnx", model_prefix))
-        .to_string_lossy()
-        .to_string();
-    let mut initialize = false;
-    if !global.ort_initialized {
-        initialize = true;
-        global.ort_initialized = true;
-    }
-    let result = Dinov2Model::from_path(&model_path, initialize);
-    if let Ok(model) = result {
-        global.classify_model = Some(model);
-    }
+    let request = worker::LoadTask {
+        model_name: global
+            .params
+            .classify_model_name
+            .as_deref()
+            .unwrap()
+            .to_owned(),
+        model_path: global.params.model_dir.clone(),
+        model_type: worker::ModelType::Feature,
+    };
+    let _result = global.gui_channel.load_req_tx.send(request);
+    let _result = global.gui_channel.load_res_rx.recv();
 }
 
 /// Generates a grid of sampling points for image processing.
@@ -213,19 +184,19 @@ pub fn segment_action(global: &mut global::GlobalState, palette: Option<&mut can
         for batch in batcher.into_iter() {
             // let start_time = std::time::Instant::now();
             let actual_batch_size = batch.image.shape()[0];
-            let result = global.segment_model.as_mut().unwrap().forward(batch);
-            match result {
-                Ok(result) => {
-                    global
-                        .segment_model
-                        .as_ref()
-                        .unwrap()
-                        .decode_mask_to_palette(&result, &mut palette);
-                }
-                Err(e) => {
-                    log::error!("Error: {e}");
-                }
-            }
+            // let result = global.segment_model.as_mut().unwrap().forward(batch);
+            // match result {
+            //     Ok(result) => {
+            //         global
+            //             .segment_model
+            //             .as_ref()
+            //             .unwrap()
+            //             .decode_mask_to_palette(&result, &mut palette);
+            //     }
+            //     Err(e) => {
+            //         log::error!("Error: {e}");
+            //     }
+            // }
             bar.inc(actual_batch_size as u64);
             // let end_time = std::time::Instant::now();
             // log::info!("Inference time taken: {:?}", end_time - start_time);

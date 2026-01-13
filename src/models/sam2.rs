@@ -1,9 +1,6 @@
 use fast_image_resize as fr;
-use ndarray::{Array2, Array3, ArrayView2, Axis, Dimension, Ix4, array, s};
+use ndarray::{Array2, Array3, ArrayView2, Axis, Ix4, array, s};
 use ndarray_stats::QuantileExt;
-use ort::execution_providers::{
-    CPUExecutionProvider, CUDAExecutionProvider, ROCmExecutionProvider, WebGPUExecutionProvider,
-};
 use ort::session::Session;
 use ort::session::builder::GraphOptimizationLevel;
 use ort::value::TensorRef;
@@ -26,19 +23,9 @@ pub struct SAM2Output {
 
 impl SAM2Model {
     pub fn from_path(
-        model_rel: usize,
         encoder_path: &str,
         decoder_path: &str,
-        initialize: bool,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        if initialize {
-            log::info!("Initializing ONNX Runtime with execution provider");
-            ort::init()
-                .with_execution_providers([CUDAExecutionProvider::default()
-                    .build()
-                    .error_on_failure()])
-                .commit()?;
-        }
         log::info!("Loading encoder model from: {}", encoder_path);
         let encoder_session = Session::builder()?
             .with_optimization_level(GraphOptimizationLevel::Disable)?
@@ -51,7 +38,7 @@ impl SAM2Model {
             .commit_from_file(decoder_path)?;
         log::info!("Successfully loaded both encoder and decoder models");
         Ok(Self {
-            model_rel,
+            model_rel: 1024,
             encoder_session,
             decoder_session,
             mask_threshold: 0.0,
