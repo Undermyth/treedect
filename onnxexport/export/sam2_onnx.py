@@ -80,7 +80,7 @@ class SAM2ImageEncoder:
     def __init__(self, path: str) -> None:
         # Initialize model
         self.session = onnxruntime.InferenceSession(
-            path, providers=onnxruntime.get_available_providers()
+            path, providers=['DmlExecutionProvider']
         )
 
         # Get model info
@@ -156,7 +156,7 @@ class SAM2ImageDecoder:
     ) -> None:
         # Initialize model
         self.session = onnxruntime.InferenceSession(
-            path, providers=onnxruntime.get_available_providers()
+            path, providers=['DmlExecutionProvider']
         )
 
         self.orig_im_size = (
@@ -203,16 +203,6 @@ class SAM2ImageDecoder:
             point_coords,
             point_labels,
         )
-
-        # # Convert all outputs of prepare_inputs to float32 and save to npy files
-        # inputs = [inp.astype(np.float32) for inp in inputs]
-
-        # # Save each input to a separate npy file for debugging
-        # for i, inp in enumerate(inputs):
-        #     np.save(f"input_{i}.npy", inp)
-
-        print(inputs[0].shape)
-        print(inputs[0])
 
         outputs = self.infer(inputs)
 
@@ -318,11 +308,6 @@ class SAM2ImageDecoder:
 
         # Select the best masks based on the scores
         best_mask = masks[np.argmax(scores)]
-        print(best_mask.shape)
-        for i in range(best_mask.shape[0]):
-            for j in range(best_mask.shape[1]):
-                if i == 100:
-                    print(i, j, best_mask[i, j])
         best_mask = cv2.resize(
             best_mask, (self.orig_im_size[1], self.orig_im_size[0])
         )
