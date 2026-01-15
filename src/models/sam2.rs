@@ -1,6 +1,7 @@
 use fast_image_resize as fr;
-use ndarray::{Array2, Array3, ArrayView2, Axis, Ix4, array, s};
+use ndarray::{Array2, Array3, ArrayView2, Axis, Ix1, Ix2, Ix4, array, s};
 use ndarray_stats::QuantileExt;
+use ort::execution_providers::DirectMLExecutionProvider;
 use ort::session::Session;
 use ort::session::builder::GraphOptimizationLevel;
 use ort::value::TensorRef;
@@ -12,7 +13,6 @@ pub struct SAM2Model {
     pub encoder_session: Session,
     pub decoder_session: Session,
     pub model_rel: usize,
-    pub mask_threshold: f32,
 }
 
 pub struct SAM2Output {
@@ -23,9 +23,19 @@ pub struct SAM2Output {
 
 impl SAM2Model {
     pub fn from_path(
+        model_rel: usize,
         encoder_path: &str,
         decoder_path: &str,
+        initialize: bool,
     ) -> Result<Self, Box<dyn std::error::Error>> {
+        if initialize {
+            log::info!("Initializing ONNX Runtime with execution provider");
+            ort::init()
+                .with_execution_providers([DirectMLExecutionProvider::default()
+                    .build()
+                    .error_on_failure()])
+                .commit()?;
+        }
         log::info!("Loading encoder model from: {}", encoder_path);
         let encoder_session = Session::builder()?
             .with_optimization_level(GraphOptimizationLevel::Disable)?
@@ -37,11 +47,11 @@ impl SAM2Model {
             .with_intra_threads(4)?
             .commit_from_file(decoder_path)?;
         log::info!("Successfully loaded both encoder and decoder models");
+        log::info!("Intrinsic resolution of the model: {}", model_rel);
         Ok(Self {
-            model_rel: 1024,
+            model_rel,
             encoder_session,
             decoder_session,
-            mask_threshold: 0.0,
         })
     }
 
@@ -120,10 +130,17 @@ impl SAM2Model {
             let mask = &output["masks"]
                 .try_extract_array::<f32>()?
                 .into_dimensionality::<Ix4>()?;
-            // let scores = &output["iou_predictions"].try_extract_array::<f32>()?;
-            // let max_index = scores.argmax()?.as_array_view()[1];
+            let scores = &output["iou_predictions"]
+                .try_extract_array::<f32>()?
+                .into_dimensionality::<Ix2>()?;
+            // let (_, max_index) = scores.argmax()?;
+            let max_index = if scores[(0, 0)] > scores[(0, 1)] {
+                0
+            } else {
+                1
+            };
 
-            let mask: ArrayView2<f32> = mask.slice(s![0, 0, .., ..]);
+            let mask: ArrayView2<f32> = mask.slice(s![0, max_index, .., ..]);
 
             let mask = mask.as_standard_layout().into_owned();
             let (mask_vec, _) = mask.into_raw_vec_and_offset();
@@ -156,16 +173,20 @@ impl SAM2Model {
         }
     }
 
-    pub fn decode_mask_to_palette(&self, output: &SAM2Output, palette: &mut canvas::Palette) {
+    pub fn decode_mask_to_palette(
+        &self,
+        output: &SAM2Output,
+        palette: &mut canvas::Palette,
+        threshold: f32,
+    ) {
         for (i, (mask_logit, coordinate)) in output
             .mask_logits
             .axis_iter(Axis(0))
             .zip(output.coordinates.axis_iter(Axis(0)))
             .enumerate()
         {
-            let mask = mask_logit.mapv(|x| {
-                (x > self.mask_threshold) as usize * (i + palette.num_patches + 1) as usize
-            });
+            let mask = mask_logit
+                .mapv(|x| (x > threshold) as usize * (i + palette.num_patches + 1) as usize);
             let coord_y = coordinate[0] as usize;
             let coord_x = coordinate[1] as usize;
             let patch_size = output.patch_size;

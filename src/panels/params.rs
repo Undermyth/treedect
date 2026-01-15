@@ -157,6 +157,13 @@ impl ParamsPanel {
                     egui::DragValue::new(&mut global.params.batch_size).speed(2),
                 );
                 ui.end_row();
+
+                ui.label("Mask Threshold");
+                ui.add_sized(
+                    ui.available_size_before_wrap(),
+                    egui::DragValue::new(&mut global.params.mask_threshold).speed(0.02),
+                );
+                ui.end_row();
             });
     }
 }

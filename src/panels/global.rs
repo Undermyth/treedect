@@ -1,5 +1,6 @@
+use crate::models::dinov2::Dinov2Model;
+use crate::models::sam2::SAM2Model;
 use crate::panels::canvas;
-use crate::worker::GUIChannel;
 
 pub enum ProgressState {
     Loading(String),
@@ -34,6 +35,8 @@ pub struct Params {
     pub grid_sampling_interval: usize,
     /// batch size for both segmentation and classification.
     pub batch_size: usize,
+    /// mask extraction threshold. higher value will result in smaller masks.
+    pub mask_threshold: f32,
 }
 
 impl Params {
@@ -45,7 +48,8 @@ impl Params {
             classify_model_name: None,
             use_height_sampling: false,
             grid_sampling_interval: 320,
-            batch_size: 8,
+            batch_size: 4,
+            mask_threshold: 0.0,
         }
     }
 }
@@ -54,21 +58,25 @@ pub struct GlobalState {
     pub layers: Vec<canvas::Layer>,
     pub progress_state: ProgressState,
     pub canvas_state: canvas::CanvasState,
-    pub gui_channel: GUIChannel,
     pub params: Params,
+    pub ort_initialized: bool,
+    pub segment_model: Option<SAM2Model>,
+    pub classify_model: Option<Dinov2Model>,
     pub raw_image: Option<canvas::LayerImage>,
     pub sampling_points: Option<Vec<[usize; 2]>>,
     pub select_pos: [usize; 2],
 }
 
 impl GlobalState {
-    pub fn new(gui_channel: GUIChannel) -> Self {
+    pub fn new() -> Self {
         Self {
             layers: Vec::<canvas::Layer>::new(),
-            progress_state: ProgressState::Finished,
             canvas_state: canvas::CanvasState::default(),
-            gui_channel: gui_channel,
+            progress_state: ProgressState::Finished,
             params: Params::new(),
+            ort_initialized: false,
+            segment_model: None,
+            classify_model: None,
             raw_image: None,
             sampling_points: None,
             select_pos: [0, 0],

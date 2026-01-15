@@ -196,7 +196,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     input_size = (1024, 1024)
-    batch_size = 2
+    batch_size = 8
     multimask_output = True
     model_type = args.model_type
     if model_type == "sam2_hiera_tiny":

@@ -20,6 +20,15 @@ pub struct SAM2Batch {
     pub original_size: usize,
 }
 
+impl SAM2Batch {
+    pub fn print(&self) {
+        println!("Image shape: {:?}", self.image.shape());
+        println!("Coordinates:\n{}", self.coordinates);
+        println!("Sampling coords:\n{}", self.sampling_coords);
+        println!("Original size: {}", self.original_size);
+    }
+}
+
 pub struct SAM2Batcher<'a> {
     idx: usize,
     batch_size: usize,
@@ -114,7 +123,7 @@ impl<'a> Iterator for SAM2Batcher<'a> {
         self.idx += actual_batch_size;
         // log::info!("Proceeding batch to {}", self.idx);
         unsafe {
-            return Some(SAM2Batch {
+            let batch = SAM2Batch {
                 image: batch
                     .assume_init()
                     .permuted_axes([0, 3, 1, 2])
@@ -123,7 +132,9 @@ impl<'a> Iterator for SAM2Batcher<'a> {
                 coordinates: coordinates.assume_init().to_owned(),
                 sampling_coords: sampling_coords.assume_init().to_owned(),
                 original_size: self.patch_size,
-            });
+            };
+            batch.print();
+            return Some(batch);
         }
     }
 }

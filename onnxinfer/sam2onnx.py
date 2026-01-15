@@ -20,7 +20,7 @@ class SAM2ONNX:
         ]
     def encode(self, image: np.ndarray) -> Dict[str, np.ndarray]:
         output = self.encoder_session.run(
-            self.encoder_output_names, {"input": image}
+            self.encoder_output_names, {"image": image}
         )
         return {
             "high_res_feats_0": output[0],
@@ -49,3 +49,11 @@ class SAM2ONNX:
             "masks": output[0],
             "scores": output[1],
         }
+
+if __name__ == '__main__':
+    encoder_path = r"C:\Users\Activator\code\treedect\output_models\sam2_hiera_small.encoder.onnx"
+    decoder_path = r"C:\Users\Activator\code\treedect\output_models\sam2_hiera_small.decoder.onnx"
+    sam2onnx = SAM2ONNX(encoder_path, decoder_path)
+    image = np.ones((4, 3, 1024, 1024)).astype(np.float32)
+    result = sam2onnx.encode(image)
+    print(result)
