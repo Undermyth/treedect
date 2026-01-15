@@ -21,6 +21,7 @@ pub struct SAM2Batch {
 }
 
 impl SAM2Batch {
+    #[allow(dead_code)]
     pub fn print(&self) {
         println!("Image shape: {:?}", self.image.shape());
         println!("Coordinates:\n{}", self.coordinates);
@@ -88,7 +89,7 @@ impl<'a> Iterator for SAM2Batcher<'a> {
             array![start_y, start_x]
                 .view()
                 .assign_to(coordinates.slice_mut(s![i - start_idx, ..]));
-            array![(y - start_y) as f32, (x - start_x) as f32]
+            array![(x - start_x) as f32, (y - start_y) as f32]
                 .view()
                 .assign_to(sampling_coords.slice_mut(s![i - start_idx, ..]));
             let patch = self
@@ -133,7 +134,7 @@ impl<'a> Iterator for SAM2Batcher<'a> {
                 sampling_coords: sampling_coords.assume_init().to_owned(),
                 original_size: self.patch_size,
             };
-            batch.print();
+            // batch.print();
             return Some(batch);
         }
     }
