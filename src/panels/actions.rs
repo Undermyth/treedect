@@ -3,15 +3,16 @@ use indicatif::ProgressBar;
 use phf::{Map, phf_map};
 use std::sync::mpsc::Sender;
 
-use crate::models::batcher::SAM2Batcher;
+use crate::models::dam2;
 use crate::models::dinov2::Dinov2Model;
-use crate::models::sam2::SAM2Model;
+use crate::models::sam2;
 use crate::panels::canvas;
 use crate::panels::global;
 
 static MODEL2FILENAME: Map<&'static str, &'static str> = phf_map! {
     "sam2_small" => "sam2_hiera_small",
     "dinov2_base" => "dinov2_vitb_reg",
+    "depv2_base" => "depth_anything_v2_vitb",
 };
 
 pub fn load_image_action(ctx: egui::Context, sender: Sender<String>) {
@@ -45,6 +46,25 @@ pub fn select_model_path_action(sender: Sender<String>) {
     });
 }
 
+pub fn load_depth_model_action(global: &mut global::GlobalState) {
+    let model_prefix = MODEL2FILENAME
+        .get(global.params.depth_model_name.as_deref().unwrap_or(""))
+        .unwrap();
+    let model_path = std::path::Path::new(&global.params.model_dir)
+        .join(format!("{}.onnx", model_prefix))
+        .to_string_lossy()
+        .to_string();
+    let mut initialize = false;
+    if !global.ort_initialized {
+        initialize = true;
+        global.ort_initialized = true;
+    }
+    let result = dam2::DAM2Model::from_path(518, &model_path, initialize);
+    if let Ok(model) = result {
+        global.depth_model = Some(model);
+    }
+}
+
 pub fn load_segment_model_action(global: &mut global::GlobalState) {
     let model_prefix = MODEL2FILENAME
         .get(global.params.segment_model_name.as_deref().unwrap_or(""))
@@ -62,7 +82,7 @@ pub fn load_segment_model_action(global: &mut global::GlobalState) {
         initialize = true;
         global.ort_initialized = true;
     }
-    let result = SAM2Model::from_path(
+    let result = sam2::SAM2Model::from_path(
         // global.params.segment_rel as usize,
         1024,
         &encoder_path,
@@ -189,6 +209,38 @@ pub fn filter_sampling_action(
         .collect()
 }
 
+pub fn haware_sampling_action(global: &mut global::GlobalState) -> Vec<[usize; 2]> {
+    let mut sampling_points = Vec::<[usize; 2]>::new();
+    let raw_image = global.raw_image.as_ref().unwrap();
+    if let canvas::LayerImage::RGBImage(image) = raw_image {
+        let batcher = dam2::DAM2Batcher::new(global.params.segment_rel as usize, image);
+        let bar = ProgressBar::new(batcher.len() as u64);
+        bar.set_style(
+            indicatif::ProgressStyle::with_template(
+                "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len}",
+            )
+            .unwrap(),
+        );
+        bar.set_prefix("Segmenting");
+        for batch in batcher.into_iter() {
+            let result = global.depth_model.as_mut().unwrap().forward(batch);
+            match result {
+                Ok(result) => {
+                    let samples =
+                        dam2::decode_depth_to_sample(&result, global.params.dilation_radius);
+                    sampling_points.extend(samples);
+                }
+                Err(e) => {
+                    log::error!("Error: {e}");
+                }
+            }
+            bar.inc(1);
+        }
+    }
+    dam2::filter_near_samples(sampling_points, global.params.nms_radius)
+    // sampling_points
+}
+
 pub fn segment_action(global: &mut global::GlobalState, palette: Option<&mut canvas::Palette>) {
     let mut palette = match palette {
         Some(palette) => palette,
@@ -198,7 +250,7 @@ pub fn segment_action(global: &mut global::GlobalState, palette: Option<&mut can
     let raw_image = global.raw_image.as_ref().unwrap();
     let bar = ProgressBar::new(sampling_points.len() as u64);
     if let canvas::LayerImage::RGBImage(image) = raw_image {
-        let batcher = SAM2Batcher::new(
+        let batcher = sam2::SAM2Batcher::new(
             global.params.batch_size,
             global.params.segment_rel as usize,
             sampling_points,

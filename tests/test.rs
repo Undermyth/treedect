@@ -1,34 +1,5 @@
 #[cfg(test)]
 mod tests {
-    // #[test]
-    // fn test_ort() {
-    //     use ndarray::{Array2, Array3, Array4, ArrayView2, Axis, array, s};
-    //     use numpy::{IntoPyArray, PyArray, PyArray4, PyArrayMethods, ToPyArray};
-    //     use pyo3::prelude::*;
-    //     let sam2_onnx = Python::attach(|py| {
-    //         // Add onnxinfer directory to Python path
-    //         let sys_path = py.import("sys")?.getattr("path")?;
-    //         sys_path.call_method1("append", ("onnxinfer",))?;
-
-    //         // Import sam2onnx module and create SAM2ONNX instance
-    //         let sam2onnx_module = py.import("sam2onnx")?;
-    //         let sam2onnx_class = sam2onnx_module.getattr("SAM2ONNX")?;
-    //         let sam2_onnx = sam2onnx_class.call1((
-    //             r"C:\Users\Activator\code\treedect\output_models\sam2_hiera_small.encoder.onnx",
-    //             r"C:\Users\Activator\code\treedect\output_models\sam2_hiera_small.decoder.onnx",
-    //         ))?;
-
-    //         log::info!("Successfully loaded Python SAM2ONNX model");
-    //         Ok::<Py<PyAny>, Box<dyn std::error::Error>>(sam2_onnx.into())
-    //     })
-    //     .unwrap();
-    //     let batch = Array4::<f32>::ones((2, 3, 1024, 1024));
-    //     let result = Python::attach(|py| {
-    //         let batch = batch.into_pyarray(py);
-    //         sam2_onnx.call_method1(py, "encode", (batch,))
-    //     });
-    //     println!("{:?}", result);
-    // }
 
     #[test]
     fn test_rust_ort() {
@@ -74,5 +45,59 @@ mod tests {
         let output = encoder_session
             .run(ort::inputs!["image" => input_tensor])
             .unwrap();
+    }
+
+    #[test]
+    fn test_dilation() {
+        use image::{ImageBuffer, Luma};
+        use imageproc::distance_transform::Norm;
+        use imageproc::morphology;
+        let img_path = r"C:\Users\Activator\code\treedect\depth.png";
+        let image: ImageBuffer<Luma<u8>, Vec<u8>> = image::ImageReader::open(img_path)
+            .unwrap()
+            .with_guessed_format()
+            .unwrap()
+            .decode()
+            .unwrap()
+            .to_luma8();
+        let dilated_image = morphology::grayscale_dilate(&image, &morphology::Mask::diamond(50));
+        let dilated_path = r"C:\Users\Activator\code\treedect\depth_dilated.png";
+        dilated_image.save(dilated_path).unwrap();
+
+        // 逐元素相减生成diff图片
+        let mut sampling_points = Vec::new();
+        let mut diff_image = ImageBuffer::new(image.width(), image.height());
+        for (x, y, pixel) in image.enumerate_pixels() {
+            let original_val = pixel[0] as i32;
+            let dilated_val = dilated_image.get_pixel(x, y)[0] as i32;
+            let diff_val = (dilated_val - original_val).max(0).min(255) as u8;
+            if diff_val == 0 {
+                sampling_points.push((x, y));
+            }
+            diff_image.put_pixel(x, y, Luma([diff_val]));
+        }
+
+        // 保存diff图片
+        let diff_path = r"C:\Users\Activator\code\treedect\depth_diff.png";
+        diff_image.save(diff_path).unwrap();
+        println!("sampling_points: {:?}", sampling_points);
+    }
+
+    #[test]
+    fn test_simple_dilation() {
+        use image::GrayImage;
+        use image::{ImageBuffer, Luma};
+        use imageproc::distance_transform::Norm;
+        use imageproc::gray_image;
+        use imageproc::morphology;
+        let image = gray_image!(
+            0,   0,   0,   0,   0;
+            0,   0,   0,   0,   0;
+            0,   0, 200,   0,   0;
+            0,   0,   0,   0,   0;
+            0,   0,   0,   0,   0
+        );
+        let dilated_image = morphology::dilate(&image, Norm::L2, 2);
+        println!("{:?}", dilated_image);
     }
 }

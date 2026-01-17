@@ -10,6 +10,7 @@ env_logger = "0.11.8"
 fast_image_resize = { version = "5.4.0", features = ["bytemuck", "image", "rayon"] }
 futures = "0.3.31"
 image = { version = "0.25.9", features = ["rayon"] }
+imageproc = { version = "0.26.0", features = ["rayon"] }
 indicatif = { version = "0.18.3", features = ["rayon"] }
 log = "0.4.29"
 ndarray = { version = "0.16.0", features = ["rayon"] }

@@ -43,6 +43,7 @@ pub fn update_drag_and_zoom(
         canvas_state.initialized = true;
         log::info!("initial_scale: {initial_scale:?}");
         log::info!("initial_offset: {initial_offset:?}");
+        log::info!("image_size: {image_size:?}");
     }
     // 处理拖拽 (Pan)
     if response.drag_started() {
@@ -246,7 +247,7 @@ impl Layer {
         Self {
             name,
             visible: true,
-            opacity: 1.0,
+            opacity: 0.7,
             raw_image: Some(image),
             texture: None,
             editable: true,

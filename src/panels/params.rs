@@ -25,7 +25,7 @@ impl ParamsPanel {
                 ui.add_sized(
                     ui.available_size_before_wrap(),
                     egui::DragValue::new(&mut global.params.segment_rel)
-                        .speed(100)
+                        .speed(20)
                         .suffix(" px"),
                 );
                 ui.end_row();
@@ -47,6 +47,25 @@ impl ParamsPanel {
                     let (sender, receiver) = channel();
                     self.model_path_receiver = Some(receiver);
                     actions::select_model_path_action(sender);
+                }
+                ui.end_row();
+
+                ui.label("Depth Model");
+                egui::ComboBox::from_id_salt("depth_model")
+                    .width(100.0)
+                    .selected_text(global.params.depth_model_name.as_deref().unwrap_or(""))
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut global.params.depth_model_name,
+                            Some("depv2_base".to_string()),
+                            "DEPTH_V2_BASE",
+                        );
+                    });
+                if ui
+                    .add_sized([30.0, ui.available_height()], egui::Button::new(" Load "))
+                    .clicked()
+                {
+                    actions::load_depth_model_action(global);
                 }
                 ui.end_row();
 
@@ -138,6 +157,20 @@ impl ParamsPanel {
                             global.params.segment_rel as usize,
                         ));
                         global.sampling_points = Some(sampling_points);
+                    } else {
+                        let [width, height] = global.layers[0].get_image_size();
+                        let mut sampling_points = actions::haware_sampling_action(global);
+                        let sampling_points = actions::filter_sampling_action(
+                            &mut sampling_points,
+                            global.raw_image.as_ref().unwrap(),
+                        );
+                        global.layers.push(Layer::from_sampling_points(
+                            &sampling_points,
+                            width,
+                            height,
+                            global.params.segment_rel as usize,
+                        ));
+                        global.sampling_points = Some(sampling_points);
                     }
                 }
                 ui.end_row();
@@ -162,6 +195,24 @@ impl ParamsPanel {
                 ui.add_sized(
                     ui.available_size_before_wrap(),
                     egui::DragValue::new(&mut global.params.mask_threshold).speed(0.02),
+                );
+                ui.end_row();
+
+                ui.label("Dilation Radius");
+                ui.add_sized(
+                    ui.available_size_before_wrap(),
+                    egui::DragValue::new(&mut global.params.dilation_radius)
+                        .speed(1)
+                        .suffix(" px"),
+                );
+                ui.end_row();
+
+                ui.label("NMS Radius");
+                ui.add_sized(
+                    ui.available_size_before_wrap(),
+                    egui::DragValue::new(&mut global.params.nms_radius)
+                        .speed(1)
+                        .suffix(" px"),
                 );
                 ui.end_row();
             });
