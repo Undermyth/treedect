@@ -78,7 +78,7 @@ impl Canvas {
             }
             if ui.button("Segment Here").clicked() {
                 global.sampling_points = Some(vec![global.select_pos]);
-                actions::segment_action(global, None);
+                actions::point_segment_action(global);
                 global.layers[2].rerender();
             }
             if ui.button("Reset View").clicked() {
@@ -122,7 +122,11 @@ impl Progress {
             }),
             global::ProgressState::Processing(text, progress) => ui.horizontal(|ui| {
                 ui.label(text);
-                ui.add(egui::ProgressBar::new(*progress).animate(true).show_percentage());
+                ui.add(
+                    egui::ProgressBar::new(*progress)
+                        .animate(true)
+                        .show_percentage(),
+                );
             }),
             global::ProgressState::Finished => ui.horizontal(|ui| {
                 ui.colored_label(egui::Color32::GREEN, "●");

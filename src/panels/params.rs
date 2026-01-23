@@ -7,12 +7,16 @@ use crate::panels::{actions, global};
 
 pub struct ParamsPanel {
     model_path_receiver: Option<Receiver<String>>,
+    depth_progress_receiver: Option<Receiver<f32>>,
+    depth_receiver: Option<Receiver<Vec<[usize; 2]>>>,
 }
 
 impl ParamsPanel {
     pub fn new() -> Self {
         Self {
             model_path_receiver: None,
+            depth_progress_receiver: None,
+            depth_receiver: None,
         }
     }
 
@@ -108,6 +112,34 @@ impl ParamsPanel {
                 ui.end_row();
 
                 ui.label("H-Aware Sampling");
+                // check receiver
+                if let Some(receiver) = &self.depth_progress_receiver {
+                    if let Ok(progress) = receiver.try_recv() {
+                        global.progress_state = global::ProgressState::Processing(
+                            "Running Depth Estimation".to_string(),
+                            progress,
+                        );
+                    }
+                }
+                if let Some(receiver) = &self.depth_receiver {
+                    if let Ok(mut sampling_points) = receiver.try_recv() {
+                        let [width, height] = global.layers[0].get_image_size();
+                        let sampling_points = actions::filter_sampling_action(
+                            &mut sampling_points,
+                            global.raw_image.as_ref().unwrap().lock().unwrap(),
+                        );
+                        global.layers.push(Layer::from_sampling_points(
+                            &sampling_points,
+                            width,
+                            height,
+                            global.params.segment_rel as usize,
+                        ));
+                        global.sampling_points = Some(sampling_points);
+                        self.depth_progress_receiver = None;
+                        self.depth_receiver = None;
+                    }
+                }
+
                 ui.checkbox(&mut global.params.use_height_sampling, "Enable");
                 if ui
                     .add_sized([30.0, ui.available_height()], egui::Button::new(" Start "))
@@ -120,6 +152,7 @@ impl ParamsPanel {
                         return;
                     }
                     // pop out the previous generated sampling points layer
+                    // TODO: this is a hacky way to remove the sampling points layer. Should have a unique ID.
                     if global.layers.len() == 2 {
                         global.layers.pop();
                     }
@@ -145,7 +178,7 @@ impl ParamsPanel {
                         let start_time = std::time::Instant::now();
                         let sampling_points = actions::filter_sampling_action(
                             &mut sampling_points,
-                            global.raw_image.as_ref().unwrap(),
+                            global.raw_image.as_ref().unwrap().lock().unwrap(),
                         );
                         let filter_time = start_time.elapsed();
                         log::info!("Filter sampling took: {:?}", filter_time);
@@ -159,26 +192,22 @@ impl ParamsPanel {
                         global.sampling_points = Some(sampling_points);
                     } else {
                         if global.raw_image.is_none() {
-                            global.progress_state = global::ProgressState::Error("No image loaded".to_string());
+                            global.progress_state =
+                                global::ProgressState::Error("No image loaded".to_string());
                             return;
                         }
                         if global.depth_model.is_none() {
-                            global.progress_state = global::ProgressState::Error("Height-aware sampling is enabled but no depth model loaded".to_string());
+                            global.progress_state = global::ProgressState::Error(
+                                "Height-aware sampling is enabled but no depth model loaded"
+                                    .to_string(),
+                            );
                             return;
                         }
-                        let [width, height] = global.layers[0].get_image_size();
-                        let mut sampling_points = actions::haware_sampling_action(global);
-                        let sampling_points = actions::filter_sampling_action(
-                            &mut sampling_points,
-                            global.raw_image.as_ref().unwrap(),
-                        );
-                        global.layers.push(Layer::from_sampling_points(
-                            &sampling_points,
-                            width,
-                            height,
-                            global.params.segment_rel as usize,
-                        ));
-                        global.sampling_points = Some(sampling_points);
+                        let (progress_sender, progress_receiver) = channel();
+                        let (depth_sender, depth_receiver) = channel();
+                        self.depth_progress_receiver = Some(progress_receiver);
+                        self.depth_receiver = Some(depth_receiver);
+                        actions::haware_sampling_action(global, progress_sender, depth_sender);
                     }
                 }
                 ui.end_row();

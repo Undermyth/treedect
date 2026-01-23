@@ -1,9 +1,11 @@
 use eframe::egui;
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::channel;
+use std::sync::{Arc, Mutex};
 
 use crate::panels::actions;
 use crate::panels::canvas;
+use crate::panels::canvas::LayerImage;
 use crate::panels::components;
 use crate::panels::global;
 
@@ -11,7 +13,7 @@ pub struct ActionPanel {
     image_select_receiver: Option<Receiver<String>>,
     image_load_receiver: Option<Receiver<Result<canvas::Layer, String>>>,
     segment_progress_receiver: Option<Receiver<f32>>,
-    segment_receiver: Option<Receiver<Result<canvas::Layer, String>>>,
+    segment_receiver: Option<Receiver<canvas::Palette>>,
 }
 
 impl ActionPanel {
@@ -19,6 +21,8 @@ impl ActionPanel {
         Self {
             image_select_receiver: None,
             image_load_receiver: None,
+            segment_progress_receiver: None,
+            segment_receiver: None,
         }
     }
 
@@ -26,14 +30,14 @@ impl ActionPanel {
         ui.heading("Actions");
         ui.add_space(10.0);
         ui.vertical_centered_justified(|ui| {
-
             // 检查是否有异步加载完成的图像
             if let Some(receiver) = &self.image_load_receiver {
                 if let Ok(result) = receiver.try_recv() {
                     match result {
                         Ok(layer) => {
-                            global.raw_image = Some(layer.raw_image.clone().unwrap());
-                            // layer.raw_image = None;
+                            if let LayerImage::RGBImage(image) = layer.raw_image.clone().unwrap() {
+                                global.raw_image = Some(Arc::new(Mutex::new(image)));
+                            }
                             global.layers.clear();
                             global.layers.push(layer);
                             global.progress_state = global::ProgressState::Finished;
@@ -91,6 +95,25 @@ impl ActionPanel {
         });
 
         ui.vertical_centered_justified(|ui| {
+            if let Some(receiver) = &self.segment_progress_receiver {
+                if let Ok(progress) = receiver.try_recv() {
+                    global.progress_state = global::ProgressState::Processing(
+                        "Running Segmentation".to_string(),
+                        progress,
+                    );
+                }
+            }
+            if let Some(receiver) = &self.segment_receiver {
+                if let Ok(palette) = receiver.try_recv() {
+                    global.layers.push(canvas::Layer::from_palette(
+                        "Segmentation Layer".to_string(),
+                        palette,
+                    ));
+                    self.segment_progress_receiver = None;
+                    self.segment_receiver = None;
+                }
+            }
+
             if ui
                 .add(components::wide_button(
                     "Segmentation",
@@ -98,31 +121,26 @@ impl ActionPanel {
                 ))
                 .clicked()
             {
-                let raw_image = match global.raw_image.as_ref() {
-                    Some(image) => image,
-                    None => {
-                        global.progress_state = global::ProgressState::Error("No image loaded".to_string());
-                        return;
-                    }
+                if global.raw_image.is_none() {
+                    global.progress_state =
+                        global::ProgressState::Error("No image loaded".to_string());
+                    return;
                 };
-                if global.segment_model.lock().unwrap().is_none() {
-                    global.progress_state = global::ProgressState::Error("No segmentation model loaded".to_string());
+                if global.segment_model.is_none() {
+                    global.progress_state =
+                        global::ProgressState::Error("No segmentation model loaded".to_string());
                     return;
                 }
                 if global.sampling_points.is_none() {
-                    global.progress_state = global::ProgressState::Error("No sampling points generated".to_string());
+                    global.progress_state =
+                        global::ProgressState::Error("No sampling points generated".to_string());
                     return;
                 }
-                if let canvas::LayerImage::RGBImage(image) = raw_image {
-                    let (progress_sender, progress_receiver) = channel();
-                    let (segment_sender, segment_receiver) = channel();
-                    let mut palette = canvas::Palette::new(image.width() as usize);
-                    actions::segment_action(global, Some(&mut palette));
-                    global.layers.push(canvas::Layer::from_palette(
-                        "Segmentation Layer".to_string(),
-                        palette,
-                    ));
-                }
+                let (progress_sender, progress_receiver) = channel();
+                let (segment_sender, segment_receiver) = channel();
+                self.segment_progress_receiver = Some(progress_receiver);
+                self.segment_receiver = Some(segment_receiver);
+                actions::segment_action(global, progress_sender, segment_sender);
             }
         });
     }

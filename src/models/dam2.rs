@@ -2,7 +2,6 @@ use fast_image_resize as fr;
 use fast_image_resize::images::Image;
 use image::{DynamicImage, GenericImageView, Luma};
 use image::{ImageBuffer, RgbImage};
-use imageproc::distance_transform::Norm;
 use imageproc::morphology;
 use ndarray::{Array1, Array2, Array3, Array4, ArrayView2, Ix3, array, s};
 use ndarray_stats::QuantileExt;
@@ -10,6 +9,7 @@ use ort::execution_providers::DirectMLExecutionProvider;
 use ort::session::Session;
 use ort::session::builder::GraphOptimizationLevel;
 use ort::value::TensorRef;
+use std::sync::{Arc, Mutex};
 
 pub struct DAM2Batch {
     // [1, C, H, W] where H = W = 518
@@ -31,24 +31,24 @@ impl DAM2Batch {
     }
 }
 
-pub struct DAM2Batcher<'a> {
+pub struct DAM2Batcher {
     x_pos: usize,
     y_pos: usize,
     length: usize,
     patch_size: usize,
     model_rel: usize,
-    raw_image: &'a RgbImage,
+    raw_image: Arc<Mutex<RgbImage>>,
     mean: Array1<f32>,
     std: Array1<f32>,
 }
 
-impl<'a> DAM2Batcher<'a> {
-    pub fn new(patch_size: usize, raw_image: &'a RgbImage) -> Self {
+impl DAM2Batcher {
+    pub fn new(patch_size: usize, raw_image: Arc<Mutex<RgbImage>>) -> Self {
+        let width = raw_image.lock().unwrap().width() as usize;
+        let height = raw_image.lock().unwrap().height() as usize;
         let stride = patch_size / 2;
-        let n_width_patch = raw_image.width() as usize / stride - 1
-            + (raw_image.width() as usize % stride != 0) as usize;
-        let n_height_patch = raw_image.height() as usize / stride - 1
-            + (raw_image.height() as usize % stride != 0) as usize;
+        let n_width_patch = width / stride - 1 + (width % stride != 0) as usize;
+        let n_height_patch = height / stride - 1 + (height % stride != 0) as usize;
         Self {
             x_pos: 0,
             y_pos: 0,
@@ -65,14 +65,14 @@ impl<'a> DAM2Batcher<'a> {
     }
 }
 
-impl<'a> Iterator for DAM2Batcher<'a> {
+impl Iterator for DAM2Batcher {
     type Item = DAM2Batch;
     fn next(&mut self) -> Option<Self::Item> {
-        if self.y_pos == self.raw_image.height() as usize {
+        let raw_image = self.raw_image.lock().unwrap();
+        if self.y_pos == raw_image.height() as usize {
             return None;
         }
-        let patch = self
-            .raw_image
+        let patch = raw_image
             .view(
                 self.x_pos as u32,
                 self.y_pos as u32,
@@ -110,16 +110,16 @@ impl<'a> Iterator for DAM2Batcher<'a> {
 
         let stride = self.patch_size / 2;
         self.x_pos += stride;
-        if self.x_pos + stride == self.raw_image.width() as usize {
+        if self.x_pos + stride == raw_image.width() as usize {
             self.x_pos = 0;
             self.y_pos += stride;
-            if self.y_pos + stride == self.raw_image.height() as usize {
-                self.y_pos = self.raw_image.height() as usize;
-            } else if self.y_pos + self.patch_size > self.raw_image.height() as usize {
-                self.y_pos = self.raw_image.height() as usize - self.patch_size;
+            if self.y_pos + stride == raw_image.height() as usize {
+                self.y_pos = raw_image.height() as usize;
+            } else if self.y_pos + self.patch_size > raw_image.height() as usize {
+                self.y_pos = raw_image.height() as usize - self.patch_size;
             }
-        } else if self.x_pos + self.patch_size > self.raw_image.width() as usize {
-            self.x_pos = self.raw_image.width() as usize - self.patch_size;
+        } else if self.x_pos + self.patch_size > raw_image.width() as usize {
+            self.x_pos = raw_image.width() as usize - self.patch_size;
         }
 
         // batch.print();

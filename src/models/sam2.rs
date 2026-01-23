@@ -1,4 +1,4 @@
-use std::sync::MutexGuard;
+use std::sync::{Arc, Mutex};
 
 use fast_image_resize as fr;
 use fast_image_resize::images::Image;
@@ -51,23 +51,23 @@ impl SAM2Batch {
     }
 }
 
-pub struct SAM2Batcher<'a> {
+pub struct SAM2Batcher {
     idx: usize,
     batch_size: usize,
     patch_size: usize,
     model_rel: usize, // resolution of SAM2 model, default to 1024
     sampling_points: Vec<[usize; 2]>,
-    raw_image: &'a RgbImage,
+    raw_image: Arc<Mutex<RgbImage>>,
     mean: Array1<f32>,
     std: Array1<f32>,
 }
 
-impl<'a> SAM2Batcher<'a> {
+impl SAM2Batcher {
     pub fn new(
         batch_size: usize,
         patch_size: usize,
         sampling_points: Vec<[usize; 2]>,
-        raw_image: &'a RgbImage,
+        raw_image: Arc<Mutex<RgbImage>>,
     ) -> Self {
         Self {
             idx: 0,
@@ -82,7 +82,7 @@ impl<'a> SAM2Batcher<'a> {
     }
 }
 
-impl<'a> Iterator for SAM2Batcher<'a> {
+impl Iterator for SAM2Batcher {
     type Item = SAM2Batch;
     fn next(&mut self) -> Option<Self::Item> {
         if self.idx >= self.sampling_points.len() {
@@ -95,16 +95,22 @@ impl<'a> Iterator for SAM2Batcher<'a> {
             Array4::<f32>::uninit((actual_batch_size, self.model_rel, self.model_rel, 3));
         let mut sampling_coords = Array2::<f32>::uninit((actual_batch_size, 2));
         let mut coordinates = Array2::<usize>::uninit((actual_batch_size, 2));
+
+        // Get lock on the image for the duration of this batch iteration
+        let raw_image = self.raw_image.lock().unwrap();
+        let image_width = raw_image.width() as usize;
+        let image_height = raw_image.height() as usize;
+
         for i in start_idx..end_idx {
             let [x, y] = self.sampling_points[i];
             let mut start_x = x.saturating_sub(self.patch_size / 2);
             let mut start_y = y.saturating_sub(self.patch_size / 2);
-            let end_x = (start_x + self.patch_size).min(self.raw_image.width() as usize);
-            let end_y = (start_y + self.patch_size).min(self.raw_image.height() as usize);
-            if end_x == self.raw_image.width() as usize {
+            let end_x = (start_x + self.patch_size).min(image_width);
+            let end_y = (start_y + self.patch_size).min(image_height);
+            if end_x == image_width {
                 start_x = end_x - self.patch_size;
             }
-            if end_y == self.raw_image.height() as usize {
+            if end_y == image_height {
                 start_y = end_y - self.patch_size;
             }
             array![start_y, start_x]
@@ -113,8 +119,7 @@ impl<'a> Iterator for SAM2Batcher<'a> {
             array![(x - start_x) as f32, (y - start_y) as f32]
                 .view()
                 .assign_to(sampling_coords.slice_mut(s![i - start_idx, ..]));
-            let patch = self
-                .raw_image
+            let patch = raw_image
                 .view(
                     start_x as u32,
                     start_y as u32,
@@ -323,9 +328,10 @@ impl SAM2Model {
     pub fn decode_mask_to_palette(
         &self,
         output: &SAM2Output,
-        mut palette: MutexGuard<canvas::Palette>,
+        palette: &Arc<Mutex<canvas::Palette>>,
         threshold: f32,
     ) {
+        let mut palette = palette.lock().unwrap();
         for (i, (mask_logit, coordinate)) in output
             .mask_logits
             .axis_iter(Axis(0))

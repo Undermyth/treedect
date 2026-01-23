@@ -134,6 +134,7 @@ impl LayerImage {
     }
 }
 
+#[derive(Debug)]
 pub struct Palette {
     pub size: usize,
     pub num_patches: usize,
