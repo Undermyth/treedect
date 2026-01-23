@@ -122,7 +122,7 @@ impl Progress {
             }),
             global::ProgressState::Processing(text, progress) => ui.horizontal(|ui| {
                 ui.label(text);
-                ui.add(egui::ProgressBar::new(*progress));
+                ui.add(egui::ProgressBar::new(*progress).animate(true).show_percentage());
             }),
             global::ProgressState::Finished => ui.horizontal(|ui| {
                 ui.colored_label(egui::Color32::GREEN, "●");

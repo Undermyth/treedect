@@ -47,28 +47,59 @@ pub fn select_model_path_action(sender: Sender<String>) {
 }
 
 pub fn load_depth_model_action(global: &mut global::GlobalState) {
-    let model_prefix = MODEL2FILENAME
-        .get(global.params.depth_model_name.as_deref().unwrap_or(""))
-        .unwrap();
+    let model_name = match global.params.depth_model_name.as_deref() {
+        Some(name) => name,
+        None => {
+            global.progress_state = global::ProgressState::Error("No depth model selected".to_string());
+            return;
+        }
+    };
+    let model_prefix = match MODEL2FILENAME.get(model_name) {
+        Some(prefix) => prefix,
+        None => {
+            global.progress_state = global::ProgressState::Error(format!("Unknown depth model: {model_name}"));
+            return;
+        }
+    };
     let model_path = std::path::Path::new(&global.params.model_dir)
         .join(format!("{}.onnx", model_prefix))
         .to_string_lossy()
         .to_string();
+    if !std::path::Path::new(&model_path).exists() {
+        global.progress_state = global::ProgressState::Error(format!("Depth model not found: {}", model_path));
+        return;
+    }
     let mut initialize = false;
     if !global.ort_initialized {
         initialize = true;
         global.ort_initialized = true;
     }
     let result = dam2::DAM2Model::from_path(518, &model_path, initialize);
-    if let Ok(model) = result {
-        global.depth_model = Some(model);
+    match result {
+        Ok(model) => {
+            global.depth_model = Some(model);
+        }
+        Err(e) => {
+            log::error!("Error when loading ONNX depth model: {e}");
+        }
     }
 }
 
 pub fn load_segment_model_action(global: &mut global::GlobalState) {
-    let model_prefix = MODEL2FILENAME
-        .get(global.params.segment_model_name.as_deref().unwrap_or(""))
-        .unwrap();
+    let model_name = match global.params.segment_model_name.as_deref() {
+        Some(name) => name,
+        None => {
+            global.progress_state = global::ProgressState::Error("No segmentation model selected".to_string());
+            return;
+            }
+    };
+    let model_prefix = match MODEL2FILENAME.get(model_name) {
+        Some(prefix) => prefix,
+        None => {
+            global.progress_state = global::ProgressState::Error(format!("Unknown segmentation model: {model_name}"));
+            return;
+        }
+    };
     let encoder_path = std::path::Path::new(&global.params.model_dir)
         .join(format!("{}.encoder.onnx", model_prefix))
         .to_string_lossy()
@@ -77,6 +108,17 @@ pub fn load_segment_model_action(global: &mut global::GlobalState) {
         .join(format!("{}.decoder.onnx", model_prefix))
         .to_string_lossy()
         .to_string();
+
+    if !std::path::Path::new(&encoder_path).exists() {
+        global.progress_state = global::ProgressState::Error(format!("Segmentation encoder model not found: {}", encoder_path));
+        return;
+    }
+
+    if !std::path::Path::new(&decoder_path).exists() {
+        global.progress_state = global::ProgressState::Error(format!("Segmentation decoder model not found: {}", decoder_path));
+        return;
+    }
+
     let mut initialize = false;
     if !global.ort_initialized {
         initialize = true;
@@ -94,7 +136,7 @@ pub fn load_segment_model_action(global: &mut global::GlobalState) {
             global.segment_model = Some(model);
         }
         Err(e) => {
-            log::error!("Error: {e}");
+            log::error!("Error when loading ONNX segmentation model: {e}");
         }
     }
 }

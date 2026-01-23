@@ -63,19 +63,15 @@ impl ActionPanel {
 
                     // 在后台线程中执行异步加载
                     std::thread::spawn(move || {
-                        // 使用tokio运行时执行异步任务
-                        let rt = tokio::runtime::Runtime::new().unwrap();
-                        rt.block_on(async move {
-                            match canvas::Layer::from_path(name, path).await {
-                                Ok(layer) => {
-                                    let _ = async_sender.send(Ok(layer));
-                                }
-                                Err(e) => {
-                                    let _ = async_sender.send(Err(e.to_string()));
-                                }
+                        match canvas::Layer::from_path(name, path) {
+                            Ok(layer) => {
+                                let _ = async_sender.send(Ok(layer));
                             }
-                            ctx.request_repaint();
-                        });
+                            Err(e) => {
+                                let _ = async_sender.send(Err(e.to_string()));
+                            }
+                        }
+                        ctx.request_repaint();
                     });
                 }
             }
@@ -98,7 +94,22 @@ impl ActionPanel {
                 ))
                 .clicked()
             {
-                if let canvas::LayerImage::RGBImage(image) = global.raw_image.as_ref().unwrap() {
+                let raw_image = match global.raw_image.as_ref() {
+                    Some(image) => image,
+                    None => {
+                        global.progress_state = global::ProgressState::Error("No image loaded".to_string());
+                        return;
+                    }
+                };
+                if global.segment_model.is_none() {
+                    global.progress_state = global::ProgressState::Error("No segmentation model loaded".to_string());
+                    return;
+                }
+                if global.sampling_points.is_none() {
+                    global.progress_state = global::ProgressState::Error("No sampling points generated".to_string());
+                    return;
+                }
+                if let canvas::LayerImage::RGBImage(image) = raw_image {
                     let mut palette = canvas::Palette::new(image.width() as usize);
                     actions::segment_action(global, Some(&mut palette));
                     global.layers.push(canvas::Layer::from_palette(

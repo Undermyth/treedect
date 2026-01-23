@@ -217,29 +217,23 @@ impl Layer {
 
     // 异步版本的图像加载
     // create image layer
-    pub async fn from_path(
+    pub fn from_path(
         name: String,
         path: String,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        // 在后台线程中执行阻塞的文件I/O操作
-        let layer = tokio::task::spawn_blocking(move || {
-            let path = std::path::Path::new(&path);
-            let image = image::ImageReader::open(path)?.decode()?;
-            let image_buffer = image.to_rgb8();
-            Ok::<Self, Box<dyn std::error::Error + Send + Sync>>(Self {
-                name: name.to_owned(),
-                visible: true,
-                opacity: 1.0,
-                raw_image: Some(LayerImage::RGBImage(image_buffer)),
-                // image_data: egui::ColorImage::from_rgba_premultiplied(size, pixels.as_slice()),
-                texture: None,
-                editable: false,
-                palette: None,
-            })
+        let path = std::path::Path::new(&path);
+        let image = image::ImageReader::open(path)?.decode()?;
+        let image_buffer = image.to_rgb8();
+        Ok::<Self, Box<dyn std::error::Error + Send + Sync>>(Self {
+            name: name.to_owned(),
+            visible: true,
+            opacity: 1.0,
+            raw_image: Some(LayerImage::RGBImage(image_buffer)),
+            // image_data: egui::ColorImage::from_rgba_premultiplied(size, pixels.as_slice()),
+            texture: None,
+            editable: false,
+            palette: None,
         })
-        .await??;
-
-        Ok(layer)
     }
 
     pub fn from_palette(name: String, palette: Palette) -> Self {

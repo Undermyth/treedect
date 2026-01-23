@@ -158,6 +158,14 @@ impl ParamsPanel {
                         ));
                         global.sampling_points = Some(sampling_points);
                     } else {
+                        if global.raw_image.is_none() {
+                            global.progress_state = global::ProgressState::Error("No image loaded".to_string());
+                            return;
+                        }
+                        if global.depth_model.is_none() {
+                            global.progress_state = global::ProgressState::Error("Height-aware sampling is enabled but no depth model loaded".to_string());
+                            return;
+                        }
                         let [width, height] = global.layers[0].get_image_size();
                         let mut sampling_points = actions::haware_sampling_action(global);
                         let sampling_points = actions::filter_sampling_action(
