@@ -1,3 +1,5 @@
+use std::sync::MutexGuard;
+
 use fast_image_resize as fr;
 use fast_image_resize::images::Image;
 use image::RgbImage;
@@ -321,7 +323,7 @@ impl SAM2Model {
     pub fn decode_mask_to_palette(
         &self,
         output: &SAM2Output,
-        palette: &mut canvas::Palette,
+        mut palette: MutexGuard<canvas::Palette>,
         threshold: f32,
     ) {
         for (i, (mask_logit, coordinate)) in output

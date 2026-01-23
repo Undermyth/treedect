@@ -1,6 +1,7 @@
 use eframe::egui;
 use ndarray::Array2;
 use rand::Rng;
+use std::sync::{Arc, Mutex};
 
 static MAX_PALETTE_SIZE: usize = 1024;
 
@@ -182,12 +183,12 @@ pub struct Layer {
     /// for image layer, the ownership will be transfered to global state,
     /// and `raw_image` will be set to `None` soon after creation.
     pub raw_image: Option<LayerImage>,
-    // GPU 纹理句柄
+    /// GPU 纹理句柄
     texture: Option<egui::TextureHandle>,
     // below for editable layers. If the layer is not editable, palette
     // and other data structure will not be maintained.
     pub editable: bool,
-    pub palette: Option<Palette>,
+    pub palette: Option<Arc<Mutex<Palette>>>,
 }
 
 impl Layer {
@@ -245,7 +246,7 @@ impl Layer {
             raw_image: Some(image),
             texture: None,
             editable: true,
-            palette: Some(palette),
+            palette: Some(Arc::new(Mutex::new(palette))),
         }
     }
 
@@ -329,6 +330,7 @@ impl Layer {
 
     pub fn get_id_at_position(&self, pos: [usize; 2]) -> Option<usize> {
         if let Some(palette) = &self.palette {
+            let palette = palette.lock().unwrap();
             let index = palette.map[(pos[1], pos[0])];
             if index != 0 {
                 return Some(index);
@@ -340,7 +342,7 @@ impl Layer {
     }
 
     pub fn rerender(&mut self) {
-        let new_image = self.palette.as_ref().unwrap().to_image();
+        let new_image = self.palette.as_ref().unwrap().lock().unwrap().to_image();
         if let LayerImage::EguiImage(image_data) = new_image {
             self.texture
                 .as_mut()
@@ -356,9 +358,11 @@ impl Layer {
                 .palette
                 .as_mut()
                 .unwrap()
+                .lock()
+                .unwrap()
                 .map
                 .mapv(|x| if x == segment_id { 0 } else { x });
-            self.palette.as_mut().unwrap().map = new_map;
+            self.palette.as_mut().unwrap().lock().unwrap().map = new_map;
             self.rerender();
         }
     }

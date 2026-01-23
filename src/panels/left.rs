@@ -10,6 +10,8 @@ use crate::panels::global;
 pub struct ActionPanel {
     image_select_receiver: Option<Receiver<String>>,
     image_load_receiver: Option<Receiver<Result<canvas::Layer, String>>>,
+    segment_progress_receiver: Option<Receiver<f32>>,
+    segment_receiver: Option<Receiver<Result<canvas::Layer, String>>>,
 }
 
 impl ActionPanel {
@@ -24,6 +26,7 @@ impl ActionPanel {
         ui.heading("Actions");
         ui.add_space(10.0);
         ui.vertical_centered_justified(|ui| {
+
             // 检查是否有异步加载完成的图像
             if let Some(receiver) = &self.image_load_receiver {
                 if let Ok(result) = receiver.try_recv() {
@@ -86,6 +89,7 @@ impl ActionPanel {
                 actions::load_image_action(ui.ctx().clone(), async_sender);
             }
         });
+
         ui.vertical_centered_justified(|ui| {
             if ui
                 .add(components::wide_button(
@@ -101,7 +105,7 @@ impl ActionPanel {
                         return;
                     }
                 };
-                if global.segment_model.is_none() {
+                if global.segment_model.lock().unwrap().is_none() {
                     global.progress_state = global::ProgressState::Error("No segmentation model loaded".to_string());
                     return;
                 }
@@ -110,6 +114,8 @@ impl ActionPanel {
                     return;
                 }
                 if let canvas::LayerImage::RGBImage(image) = raw_image {
+                    let (progress_sender, progress_receiver) = channel();
+                    let (segment_sender, segment_receiver) = channel();
                     let mut palette = canvas::Palette::new(image.width() as usize);
                     actions::segment_action(global, Some(&mut palette));
                     global.layers.push(canvas::Layer::from_palette(

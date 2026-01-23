@@ -2,6 +2,7 @@ use eframe::egui;
 use indicatif::ProgressBar;
 use phf::{Map, phf_map};
 use std::sync::mpsc::Sender;
+use std::sync::{Arc, Mutex};
 
 use crate::models::dam2;
 use crate::models::dinov2::Dinov2Model;
@@ -133,7 +134,7 @@ pub fn load_segment_model_action(global: &mut global::GlobalState) {
     );
     match result {
         Ok(model) => {
-            global.segment_model = Some(model);
+            global.segment_model = Arc::new(Mutex::new(Some(model)));
         }
         Err(e) => {
             log::error!("Error when loading ONNX segmentation model: {e}");
@@ -283,11 +284,12 @@ pub fn haware_sampling_action(global: &mut global::GlobalState) -> Vec<[usize; 2
     // sampling_points
 }
 
-pub fn segment_action(global: &mut global::GlobalState, palette: Option<&mut canvas::Palette>) {
-    let mut palette = match palette {
+pub fn segment_action(global: &mut global::GlobalState, palette: Option<Arc<Mutex<canvas::Palette>>>) {
+    let palette = match &palette {
         Some(palette) => palette,
-        None => global.layers[2].palette.as_mut().unwrap(),
+        None => global.layers[2].palette.as_ref().unwrap(),
     };
+    let palette = palette.clone();
     let sampling_points = global.sampling_points.clone().unwrap();
     let raw_image = global.raw_image.as_ref().unwrap();
     let bar = ProgressBar::new(sampling_points.len() as u64);
@@ -298,6 +300,7 @@ pub fn segment_action(global: &mut global::GlobalState, palette: Option<&mut can
             sampling_points,
             image,
         );
+        let model = global.segment_model.clone();
         bar.set_style(
             indicatif::ProgressStyle::with_template(
                 "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len}",
@@ -305,30 +308,29 @@ pub fn segment_action(global: &mut global::GlobalState, palette: Option<&mut can
             .unwrap(),
         );
         bar.set_prefix("Segmenting");
-        for batch in batcher.into_iter() {
-            // let start_time = std::time::Instant::now();
-            let actual_batch_size = batch.image.shape()[0];
-            let result = global.segment_model.as_mut().unwrap().forward(batch);
-            match result {
-                Ok(result) => {
-                    global
-                        .segment_model
-                        .as_ref()
-                        .unwrap()
-                        .decode_mask_to_palette(
-                            &result,
-                            &mut palette,
-                            global.params.mask_threshold,
-                        );
+        std::thread::spawn(move || {
+            for batch in batcher.into_iter() {
+                // let start_time = std::time::Instant::now();
+                let actual_batch_size = batch.image.shape()[0];
+                let result = model.lock().unwrap().unwrap().forward(batch);
+                match result {
+                    Ok(result) => {
+                        model.lock().unwrap().unwrap()
+                            .decode_mask_to_palette(
+                                &result,
+                                palette.lock().unwrap(),
+                                global.params.mask_threshold,
+                            );
+                    }
+                    Err(e) => {
+                        log::error!("Error: {e}");
+                    }
                 }
-                Err(e) => {
-                    log::error!("Error: {e}");
-                }
+                bar.inc(actual_batch_size as u64);
+                // let end_time = std::time::Instant::now();
+                // log::info!("Inference time taken: {:?}", end_time - start_time);
             }
-            bar.inc(actual_batch_size as u64);
-            // let end_time = std::time::Instant::now();
-            // log::info!("Inference time taken: {:?}", end_time - start_time);
-        }
-        bar.finish();
-    }
+            bar.finish();
+        });
+    };
 }
