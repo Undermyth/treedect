@@ -15,6 +15,8 @@ pub struct ActionPanel {
     image_load_receiver: Option<Receiver<Result<canvas::Layer, String>>>,
     segment_progress_receiver: Option<Receiver<f32>>,
     segment_receiver: Option<Receiver<palette::Palette>>,
+    classify_progress_receiver: Option<Receiver<f32>>,
+    classify_receiver: Option<Receiver<bool>>,
 }
 
 impl ActionPanel {
@@ -24,6 +26,8 @@ impl ActionPanel {
             image_load_receiver: None,
             segment_progress_receiver: None,
             segment_receiver: None,
+            classify_progress_receiver: None,
+            classify_receiver: None,
         }
     }
 
@@ -142,6 +146,51 @@ impl ActionPanel {
                 self.segment_progress_receiver = Some(progress_receiver);
                 self.segment_receiver = Some(segment_receiver);
                 actions::segment_action(global, progress_sender, segment_sender);
+            }
+        });
+
+        ui.vertical_centered_justified(|ui| {
+            if let Some(receiver) = &self.classify_progress_receiver {
+                if let Ok(progress) = receiver.try_recv() {
+                    global.progress_state = global::ProgressState::Processing(
+                        "Running Classification".to_string(),
+                        progress,
+                    )
+                }
+            }
+            if let Some(receiver) = &self.classify_receiver {
+                if let Ok(finished) = receiver.try_recv() {
+                    self.classify_progress_receiver = None;
+                    self.classify_receiver = None;
+                }
+            }
+            if ui
+                .add(components::wide_button(
+                    "Classification",
+                    ui.available_width(),
+                ))
+                .clicked()
+            {
+                if global.raw_image.is_none() {
+                    global.progress_state =
+                        global::ProgressState::Error("No image loaded".to_string());
+                    return;
+                }
+                if global.classify_model.is_none() {
+                    global.progress_state =
+                        global::ProgressState::Error("No classification model loaded".to_string());
+                    return;
+                }
+                if global.layers.len() < 3 {
+                    global.progress_state =
+                        global::ProgressState::Error("Segmentation is not executed".to_string());
+                    return;
+                }
+                let (progress_sender, progress_receiver) = channel();
+                let (classify_sender, classify_receiver) = channel();
+                self.classify_progress_receiver = Some(progress_receiver);
+                self.classify_receiver = Some(classify_receiver);
+                actions::classify_action(global, progress_sender, classify_sender);
             }
         });
     }

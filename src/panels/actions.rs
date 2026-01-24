@@ -5,7 +5,7 @@ use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::models::dam2;
-use crate::models::dinov2::Dinov2Model;
+use crate::models::dinov2;
 use crate::models::sam2;
 use crate::panels::global;
 use crate::panels::palette;
@@ -166,9 +166,9 @@ pub fn load_classify_model_action(global: &mut global::GlobalState) {
         initialize = true;
         global.ort_initialized = true;
     }
-    let result = Dinov2Model::from_path(&model_path, initialize);
+    let result = dinov2::Dinov2Model::from_path(&model_path, initialize);
     if let Ok(model) = result {
-        global.classify_model = Some(model);
+        global.classify_model = Some(Arc::new(Mutex::new(model)));
     }
 }
 
@@ -397,4 +397,43 @@ pub fn point_segment_action(global: &mut global::GlobalState) {
         // log::info!("Inference time taken: {:?}", end_time - start_time);
     }
     bar.finish();
+}
+
+pub fn classify_action(
+    global: &mut global::GlobalState,
+    progress_sender: Sender<f32>,
+    classify_sender: Sender<bool>,
+) {
+    let raw_image = global.raw_image.as_ref().unwrap();
+    let raw_image = raw_image.clone();
+    let palette = global.layers[2].palette.as_ref().unwrap();
+    let palette = palette.clone();
+    let mut batcher = dinov2::Dinov2Batcher::new(global.params.batch_size, raw_image, palette);
+    let length = batcher.len();
+    let model = global.classify_model.as_mut().unwrap().clone();
+    std::thread::spawn(move || {
+        let bar = ProgressBar::new(length as u64);
+        bar.set_style(
+            indicatif::ProgressStyle::with_template(
+                "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len}",
+            )
+            .unwrap(),
+        );
+        bar.set_prefix("Feature Extraction");
+        for batch in batcher.into_iter() {
+            let actual_batch_size = batch.image.shape()[0];
+            let result = model.lock().unwrap().forward(batch);
+            match result {
+                Ok(result) => {}
+                Err(e) => {
+                    log::error!("Error: {e}");
+                }
+            }
+            bar.inc(actual_batch_size as u64);
+            let percent = bar.position() as f32 / length as f32;
+            progress_sender.send(percent).unwrap();
+        }
+        bar.finish();
+        classify_sender.send(true).unwrap();
+    });
 }

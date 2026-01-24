@@ -154,7 +154,7 @@ impl DAM2Model {
         }
         log::info!("Loading model from: {}", path);
         let session = Session::builder()?
-            .with_optimization_level(GraphOptimizationLevel::Disable)?
+            .with_optimization_level(GraphOptimizationLevel::Level3)?
             .with_intra_threads(4)?
             .commit_from_file(path)?;
         log::info!("Successfully loaded model");

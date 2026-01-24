@@ -183,12 +183,12 @@ impl SAM2Model {
         }
         log::info!("Loading encoder model from: {}", encoder_path);
         let encoder_session = Session::builder()?
-            .with_optimization_level(GraphOptimizationLevel::Disable)?
+            .with_optimization_level(GraphOptimizationLevel::Level3)?
             .with_intra_threads(4)?
             .commit_from_file(encoder_path)?;
         log::info!("Loading decoder model from: {}", decoder_path);
         let decoder_session = Session::builder()?
-            .with_optimization_level(GraphOptimizationLevel::Disable)?
+            .with_optimization_level(GraphOptimizationLevel::Level3)?
             .with_intra_threads(4)?
             .commit_from_file(decoder_path)?;
         log::info!("Successfully loaded both encoder and decoder models");

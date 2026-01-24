@@ -77,7 +77,7 @@ pub struct GlobalState {
     pub ort_initialized: bool,
     pub depth_model: Option<Arc<Mutex<DAM2Model>>>,
     pub segment_model: Option<Arc<Mutex<SAM2Model>>>,
-    pub classify_model: Option<Dinov2Model>,
+    pub classify_model: Option<Arc<Mutex<Dinov2Model>>>,
     pub raw_image: Option<Arc<Mutex<image::RgbImage>>>,
     pub sampling_points: Option<Vec<[usize; 2]>>,
     pub select_pos: [usize; 2],
