@@ -11,7 +11,7 @@ use ort::session::Session;
 use ort::session::builder::GraphOptimizationLevel;
 use ort::value::TensorRef;
 
-use crate::panels::canvas;
+use crate::panels::palette;
 
 pub struct SAM2Model {
     pub encoder_session: Session,
@@ -284,12 +284,20 @@ impl SAM2Model {
             } else {
                 1
             };
+            let decoded_mask = mask.mapv(|x| (x > 0.0) as usize);
+            let valid_area = decoded_mask.sum();
             if max_index == 1 {
-                let decoded_mask = mask.mapv(|x| (x > 0.0) as usize);
-                let valid_area = decoded_mask.sum();
-                if valid_area as f32 > 0.8 * self.model_rel as f32 * self.model_rel as f32 {
+                if (valid_area as f32) > 0.8 * self.model_rel as f32 * self.model_rel as f32 {
                     max_index = 0;
                 }
+                // if (valid_area as f32) < 0.1 * self.model_rel as f32 * self.model_rel as f32 {
+                //     max_index = 2;
+                // }
+            }
+            if max_index == 0
+                && (valid_area as f32) < 0.1 * self.model_rel as f32 * self.model_rel as f32
+            {
+                max_index = 1;
             }
 
             let mask: ArrayView2<f32> = mask.slice(s![0, max_index, .., ..]);
@@ -324,37 +332,119 @@ impl SAM2Model {
             })
         }
     }
+}
+pub fn decode_mask_to_palette(
+    output: &SAM2Output,
+    palette: &Arc<Mutex<palette::Palette>>,
+    threshold: f32,
+) {
+    let mut palette = palette.lock().unwrap();
+    let mut num_new_patches = 0;
+    let is_point_segment = output.coordinates.shape()[0] == 1;
+    for (mask_logit, coordinate) in output
+        .mask_logits
+        .axis_iter(Axis(0))
+        .zip(output.coordinates.axis_iter(Axis(0)))
+    {
+        let mask = mask_logit.mapv(|x| (x > threshold) as usize);
+        let coord_y = coordinate[0] as usize;
+        let coord_x = coordinate[1] as usize;
+        let patch_size = output.patch_size;
+        let num_patches = palette.num_patches;
 
-    pub fn decode_mask_to_palette(
-        &self,
-        output: &SAM2Output,
-        palette: &Arc<Mutex<canvas::Palette>>,
-        threshold: f32,
-    ) {
-        let mut palette = palette.lock().unwrap();
-        for (i, (mask_logit, coordinate)) in output
-            .mask_logits
-            .axis_iter(Axis(0))
-            .zip(output.coordinates.axis_iter(Axis(0)))
-            .enumerate()
-        {
-            let mask = mask_logit
-                .mapv(|x| (x > threshold) as usize * (i + palette.num_patches + 1) as usize);
-            let coord_y = coordinate[0] as usize;
-            let coord_x = coordinate[1] as usize;
-            let patch_size = output.patch_size;
+        let mut palette_slice = palette.map.slice_mut(s![
+            coord_y..coord_y + patch_size,
+            coord_x..coord_x + patch_size
+        ]);
 
-            let mut palette_slice = palette.map.slice_mut(s![
-                coord_y..coord_y + patch_size,
-                coord_x..coord_x + patch_size
-            ]);
-
-            for ((y, x), &mask_val) in mask.indexed_iter() {
-                if mask_val != 0 {
-                    palette_slice[[y, x]] = mask_val as usize;
-                }
+        // overlap detection. If the area already has a patch (by a overlap ratio), skip this patch
+        // TODO: possible hyper-parameter
+        // TODO: the strategy is not perfect. It may miss some patches
+        if !is_point_segment {
+            let exist_mask = palette_slice.mapv(|x| (x != 0) as usize) * &mask;
+            let exist_ratio = exist_mask.sum() as f32 / mask.sum() as f32;
+            if exist_ratio > 0.1 {
+                continue;
             }
         }
-        palette.num_patches += output.mask_logits.shape()[0];
+
+        num_new_patches += 1;
+        for ((y, x), &mask_val) in mask.indexed_iter() {
+            if mask_val != 0 {
+                palette_slice[[y, x]] = (num_patches + num_new_patches) as usize;
+            }
+        }
+        let size = palette.size;
+        palette.bboxes.push(get_bbox_from_mask(
+            mask.view(),
+            [coord_y, coord_x],
+            patch_size,
+            size,
+        ));
+        palette.valid.push(true);
+    }
+    palette.num_patches += num_new_patches;
+}
+
+/// Find the square bounding box for segmentation represented by the mask.
+///
+/// # Arguments
+///
+/// * `mask` - A 2D array view of usize representing the segmentation mask.
+///            Values greater than 0 are considered part of the segmentation.
+/// * `coord` - The coordinate [x, y] of the top-left corner of the patch in the original image.
+/// * `patch_size` - The size of the patch (width and height).
+/// * `size` - The size of original image.
+///
+/// # Returns
+///
+/// A 3-element array [x, y, size] representing the bounding box
+/// of the segmentation in the original image coordinates.
+fn get_bbox_from_mask(
+    mask: ArrayView2<usize>,
+    coord: [usize; 2],
+    patch_size: usize,
+    size: usize,
+) -> [usize; 3] {
+    let mut start_x_idx = patch_size;
+    let mut start_y_idx = patch_size;
+    let mut end_x_idx = 0;
+    let mut end_y_idx = 0;
+    for ((y, x), value) in mask.indexed_iter() {
+        if *value > 0 {
+            if x < start_x_idx {
+                start_x_idx = x;
+            }
+            if x > end_x_idx {
+                end_x_idx = x;
+            }
+            if y < start_y_idx {
+                start_y_idx = y;
+            }
+            if y > end_y_idx {
+                end_y_idx = y;
+            }
+        }
+    }
+    let width = end_x_idx - start_x_idx + 1;
+    let height = end_y_idx - start_y_idx + 1;
+    let mut start_y_coord = coord[0] + start_y_idx;
+    let mut start_x_coord = coord[1] + start_x_idx;
+    if width > height {
+        let bbox_size = width;
+        let height_offset = (width - height) / 2;
+        start_y_coord = start_y_coord.saturating_sub(height_offset);
+        if start_y_coord + bbox_size > size {
+            start_y_coord = size - bbox_size;
+        }
+        return [start_x_coord, start_y_coord, bbox_size];
+    } else {
+        let bbox_size = height;
+        let width_offset = (height - width) / 2;
+        start_x_coord = start_x_coord.saturating_sub(width_offset);
+        if start_x_coord + bbox_size > size {
+            start_x_coord = size - bbox_size;
+        }
+        return [start_x_coord, start_y_coord, bbox_size];
     }
 }

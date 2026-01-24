@@ -3,7 +3,7 @@ use ndarray::Array2;
 use rand::Rng;
 use std::sync::{Arc, Mutex};
 
-static MAX_PALETTE_SIZE: usize = 1024;
+use crate::panels::palette;
 
 /// 画布状态，用于管理平移和缩放
 pub struct CanvasState {
@@ -90,25 +90,26 @@ pub enum LayerImage {
     EguiImage(egui::ColorImage),
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct RGBPixel {
-    pub r: u8,
-    pub g: u8,
-    pub b: u8,
-}
-
-impl RGBPixel {
-    pub fn default() -> Self {
-        Self { r: 0, g: 0, b: 0 }
-    }
-}
-
 impl LayerImage {
-    pub fn get_pixel(&self, x: usize, y: usize) -> RGBPixel {
+    pub fn from_palette(palette: &palette::Palette) -> Self {
+        let mut image_data =
+            egui::ColorImage::filled([palette.size, palette.size], egui::Color32::TRANSPARENT);
+        for ((y, x), index) in palette.map.indexed_iter() {
+            if *index != 0 {
+                image_data[(x, y)] = egui::Color32::from_rgb(
+                    palette.color_map[*index].r,
+                    palette.color_map[*index].g,
+                    palette.color_map[*index].b,
+                );
+            }
+        }
+        LayerImage::EguiImage(image_data)
+    }
+    pub fn get_pixel(&self, x: usize, y: usize) -> palette::RGBPixel {
         match self {
             LayerImage::RGBAImage(image) => {
                 let pixel = &image[(x as u32, y as u32)];
-                RGBPixel {
+                palette::RGBPixel {
                     r: pixel[0],
                     g: pixel[1],
                     b: pixel[2],
@@ -116,7 +117,7 @@ impl LayerImage {
             }
             LayerImage::RGBImage(image) => {
                 let pixel = &image[(x as u32, y as u32)];
-                RGBPixel {
+                palette::RGBPixel {
                     r: pixel[0],
                     g: pixel[1],
                     b: pixel[2],
@@ -124,53 +125,13 @@ impl LayerImage {
             }
             LayerImage::EguiImage(image) => {
                 let pixel = &image[(x, y)];
-                RGBPixel {
+                palette::RGBPixel {
                     r: pixel.r(),
                     g: pixel.g(),
                     b: pixel.b(),
                 }
             }
         }
-    }
-}
-
-#[derive(Debug)]
-pub struct Palette {
-    pub size: usize,
-    pub num_patches: usize,
-    pub map: Array2<usize>,
-    pub color_map: [RGBPixel; MAX_PALETTE_SIZE],
-}
-
-impl Palette {
-    pub fn new(size: usize) -> Self {
-        let mut rng = rand::rng();
-        let mut color_map = [RGBPixel::default(); MAX_PALETTE_SIZE];
-        for i in 0..MAX_PALETTE_SIZE {
-            color_map[i].r = rng.random_range(0..255);
-            color_map[i].g = rng.random_range(0..127);
-            color_map[i].b = rng.random_range(0..255);
-        }
-        Self {
-            size,
-            num_patches: 0,
-            map: Array2::zeros([size, size]),
-            color_map,
-        }
-    }
-    pub fn to_image(&self) -> LayerImage {
-        let mut image_data =
-            egui::ColorImage::filled([self.size, self.size], egui::Color32::TRANSPARENT);
-        for ((y, x), index) in self.map.indexed_iter() {
-            if *index != 0 {
-                image_data[(x, y)] = egui::Color32::from_rgb(
-                    self.color_map[*index].r,
-                    self.color_map[*index].g,
-                    self.color_map[*index].b,
-                );
-            }
-        }
-        LayerImage::EguiImage(image_data)
     }
 }
 
@@ -189,7 +150,7 @@ pub struct Layer {
     // below for editable layers. If the layer is not editable, palette
     // and other data structure will not be maintained.
     pub editable: bool,
-    pub palette: Option<Arc<Mutex<Palette>>>,
+    pub palette: Option<Arc<Mutex<palette::Palette>>>,
 }
 
 impl Layer {
@@ -238,8 +199,8 @@ impl Layer {
         })
     }
 
-    pub fn from_palette(name: String, palette: Palette) -> Self {
-        let image = palette.to_image();
+    pub fn from_palette(name: String, palette: palette::Palette) -> Self {
+        let image = LayerImage::from_palette(&palette);
         Self {
             name,
             visible: true,
@@ -343,7 +304,8 @@ impl Layer {
     }
 
     pub fn rerender(&mut self) {
-        let new_image = self.palette.as_ref().unwrap().lock().unwrap().to_image();
+        let new_image = self.palette.as_ref().unwrap().lock().unwrap();
+        let new_image = LayerImage::from_palette(&new_image);
         if let LayerImage::EguiImage(image_data) = new_image {
             self.texture
                 .as_mut()
@@ -364,6 +326,7 @@ impl Layer {
                 .map
                 .mapv(|x| if x == segment_id { 0 } else { x });
             self.palette.as_mut().unwrap().lock().unwrap().map = new_map;
+            self.palette.as_mut().unwrap().lock().unwrap().valid[segment_id - 1] = false;
             self.rerender();
         }
     }

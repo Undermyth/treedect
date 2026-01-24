@@ -7,8 +7,8 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use crate::models::dam2;
 use crate::models::dinov2::Dinov2Model;
 use crate::models::sam2;
-use crate::panels::canvas::{self, Palette};
 use crate::panels::global;
+use crate::panels::palette;
 
 static MODEL2FILENAME: Map<&'static str, &'static str> = phf_map! {
     "sam2_small" => "sam2_hiera_small",
@@ -307,12 +307,12 @@ pub fn haware_sampling_action(
 pub fn segment_action(
     global: &mut global::GlobalState,
     progress_sender: Sender<f32>,
-    segment_sender: Sender<Palette>,
+    segment_sender: Sender<palette::Palette>,
 ) {
     let sampling_points = global.sampling_points.as_ref().unwrap().clone();
     let raw_image = global.raw_image.as_ref().unwrap();
     let width = raw_image.lock().unwrap().width() as usize;
-    let palette = canvas::Palette::new(width);
+    let palette = palette::Palette::new(width);
     let raw_image = raw_image.clone();
     let batcher = sam2::SAM2Batcher::new(
         global.params.batch_size,
@@ -338,10 +338,7 @@ pub fn segment_action(
             let result = model.lock().unwrap().forward(batch);
             match result {
                 Ok(result) => {
-                    model
-                        .lock()
-                        .unwrap()
-                        .decode_mask_to_palette(&result, &palette, mask_threshold);
+                    sam2::decode_mask_to_palette(&result, &palette, mask_threshold);
                 }
                 Err(e) => {
                     log::error!("Error: {e}");
@@ -389,10 +386,7 @@ pub fn point_segment_action(global: &mut global::GlobalState) {
         let result = model.lock().unwrap().forward(batch);
         match result {
             Ok(result) => {
-                model
-                    .lock()
-                    .unwrap()
-                    .decode_mask_to_palette(&result, &palette, mask_threshold);
+                sam2::decode_mask_to_palette(&result, &palette, mask_threshold);
             }
             Err(e) => {
                 log::error!("Error: {e}");

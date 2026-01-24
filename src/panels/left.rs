@@ -8,12 +8,13 @@ use crate::panels::canvas;
 use crate::panels::canvas::LayerImage;
 use crate::panels::components;
 use crate::panels::global;
+use crate::panels::palette;
 
 pub struct ActionPanel {
     image_select_receiver: Option<Receiver<String>>,
     image_load_receiver: Option<Receiver<Result<canvas::Layer, String>>>,
     segment_progress_receiver: Option<Receiver<f32>>,
-    segment_receiver: Option<Receiver<canvas::Palette>>,
+    segment_receiver: Option<Receiver<palette::Palette>>,
 }
 
 impl ActionPanel {
