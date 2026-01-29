@@ -24,6 +24,7 @@ pub struct Palette {
     pub color_map: [RGBPixel; MAX_PALETTE_SIZE],
     pub bboxes: Vec<[usize; 3]>,
     pub valid: Vec<bool>,
+    pub areas: Vec<usize>,
 }
 
 impl Palette {
@@ -42,6 +43,15 @@ impl Palette {
             color_map,
             bboxes: Vec::new(),
             valid: Vec::new(),
+            areas: Vec::new(),
+        }
+    }
+    pub fn get_areas(&mut self) {
+        self.areas.resize(self.num_patches, 0);
+        for index in self.map.iter() {
+            if *index != 0 {
+                self.areas[*index - 1] += 1;
+            }
         }
     }
 }

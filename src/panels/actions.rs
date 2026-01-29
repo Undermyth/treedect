@@ -407,8 +407,9 @@ pub fn classify_action(
     let raw_image = global.raw_image.as_ref().unwrap();
     let raw_image = raw_image.clone();
     let palette = global.layers[2].palette.as_ref().unwrap();
+    let mut batcher =
+        dinov2::Dinov2Batcher::new(global.params.batch_size, raw_image, palette.clone());
     let palette = palette.clone();
-    let mut batcher = dinov2::Dinov2Batcher::new(global.params.batch_size, raw_image, palette);
     let length = batcher.len();
     let model = global.classify_model.as_mut().unwrap().clone();
     std::thread::spawn(move || {
@@ -433,6 +434,8 @@ pub fn classify_action(
             let percent = bar.position() as f32 / length as f32;
             progress_sender.send(percent).unwrap();
         }
+        palette.lock().unwrap().get_areas();
+
         bar.finish();
         classify_sender.send(true).unwrap();
     });
