@@ -252,6 +252,20 @@ impl ParamsPanel {
                         .suffix(" px"),
                 );
                 ui.end_row();
+
+                ui.label("Grid");
+                ui.add_sized(
+                    ui.available_size_before_wrap(),
+                    egui::DragValue::new(&mut global.params.n_grid).speed(1),
+                );
+                ui.end_row();
+
+                ui.label("Classes");
+                ui.add_sized(
+                    ui.available_size_before_wrap(),
+                    egui::DragValue::new(&mut global.params.n_classes).speed(1),
+                );
+                ui.end_row();
             });
     }
 }

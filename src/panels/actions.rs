@@ -4,6 +4,7 @@ use phf::{Map, phf_map};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, MutexGuard};
 
+use crate::models::cluster;
 use crate::models::dam2;
 use crate::models::dinov2;
 use crate::models::sam2;
@@ -312,7 +313,7 @@ pub fn segment_action(
     let sampling_points = global.sampling_points.as_ref().unwrap().clone();
     let raw_image = global.raw_image.as_ref().unwrap();
     let width = raw_image.lock().unwrap().width() as usize;
-    let palette = palette::Palette::new(width);
+    let palette = palette::Palette::new(width, global.params.n_grid);
     let raw_image = raw_image.clone();
     let batcher = sam2::SAM2Batcher::new(
         global.params.batch_size,
@@ -412,6 +413,7 @@ pub fn classify_action(
     let palette = palette.clone();
     let length = batcher.len();
     let model = global.classify_model.as_mut().unwrap().clone();
+    let n_classes = global.params.n_classes;
     std::thread::spawn(move || {
         let bar = ProgressBar::new(length as u64);
         bar.set_style(
@@ -421,11 +423,18 @@ pub fn classify_action(
             .unwrap(),
         );
         bar.set_prefix("Feature Extraction");
+        let mut features: Option<dinov2::Dinov2Output> = None;
         for batch in batcher.into_iter() {
             let actual_batch_size = batch.image.shape()[0];
             let result = model.lock().unwrap().forward(batch);
             match result {
-                Ok(result) => {}
+                Ok(output) => {
+                    if features.is_none() {
+                        features = Some(output);
+                    } else {
+                        features.as_mut().unwrap().concat(&output);
+                    }
+                }
                 Err(e) => {
                     log::error!("Error: {e}");
                 }
@@ -434,9 +443,30 @@ pub fn classify_action(
             let percent = bar.position() as f32 / length as f32;
             progress_sender.send(percent).unwrap();
         }
-        palette.lock().unwrap().get_areas();
-
+        palette.lock().unwrap().get_statistics();
+        let features = parse_features(features.unwrap(), palette);
+        let output = cluster::cluster(features, n_classes);
+        log::info!("{:?}", output);
         bar.finish();
         classify_sender.send(true).unwrap();
     });
+}
+
+fn parse_features(
+    features: dinov2::Dinov2Output,
+    palette: Arc<Mutex<palette::Palette>>,
+) -> cluster::SegmentFeatures {
+    let mut valid_areas = Vec::new();
+    let palette = palette.lock().unwrap();
+    for (index, valid) in palette.valid.iter().enumerate() {
+        if *valid {
+            valid_areas.push(palette.areas[index]);
+        }
+    }
+    assert!(valid_areas.len() == features.segment_ids.len());
+    cluster::SegmentFeatures {
+        segment_ids: features.segment_ids,
+        features: features.features,
+        areas: valid_areas,
+    }
 }

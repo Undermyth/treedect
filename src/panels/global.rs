@@ -49,6 +49,10 @@ pub struct Params {
     pub dilation_radius: usize,
     /// radius for NMS. larger value will result in sparser sampling points.
     pub nms_radius: usize,
+    /// split the image into n_grid * n_grid to calculate the importance score.
+    pub n_grid: usize,
+    /// number of classes for clustering.
+    pub n_classes: usize,
 }
 
 impl Params {
@@ -65,6 +69,8 @@ impl Params {
             mask_threshold: 0.0,
             dilation_radius: 70,
             nms_radius: 150,
+            n_grid: 4,
+            n_classes: 5,
         }
     }
 }
@@ -75,6 +81,7 @@ pub struct GlobalState {
     pub canvas_state: canvas::CanvasState,
     pub params: Params,
     pub ort_initialized: bool,
+    pub detail_logging: bool,
     pub depth_model: Option<Arc<Mutex<DAM2Model>>>,
     pub segment_model: Option<Arc<Mutex<SAM2Model>>>,
     pub classify_model: Option<Arc<Mutex<Dinov2Model>>>,
@@ -84,13 +91,14 @@ pub struct GlobalState {
 }
 
 impl GlobalState {
-    pub fn new() -> Self {
+    pub fn new(detail_logging: bool) -> Self {
         Self {
             layers: Vec::<canvas::Layer>::new(),
             canvas_state: canvas::CanvasState::default(),
             progress_state: ProgressState::Finished,
             params: Params::new(),
             ort_initialized: false,
+            detail_logging: detail_logging,
             depth_model: None,
             segment_model: None,
             classify_model: None,

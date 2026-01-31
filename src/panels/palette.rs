@@ -1,5 +1,6 @@
 use ndarray::Array2;
 use rand::Rng;
+use std::collections::HashSet;
 
 static MAX_PALETTE_SIZE: usize = 1024;
 
@@ -25,10 +26,12 @@ pub struct Palette {
     pub bboxes: Vec<[usize; 3]>,
     pub valid: Vec<bool>,
     pub areas: Vec<usize>,
+    pub n_grids: usize,
+    pub grids: Vec<usize>, // used to calculate the importance score
 }
 
 impl Palette {
-    pub fn new(size: usize) -> Self {
+    pub fn new(size: usize, n_grids: usize) -> Self {
         let mut rng = rand::rng();
         let mut color_map = [RGBPixel::default(); MAX_PALETTE_SIZE];
         for i in 0..MAX_PALETTE_SIZE {
@@ -44,14 +47,25 @@ impl Palette {
             bboxes: Vec::new(),
             valid: Vec::new(),
             areas: Vec::new(),
+            n_grids: n_grids,
+            grids: Vec::new(),
         }
     }
-    pub fn get_areas(&mut self) {
+    pub fn get_statistics(&mut self) {
         self.areas.resize(self.num_patches, 0);
-        for index in self.map.iter() {
+        self.grids.resize(self.num_patches, 0);
+        let mut grid_list = Vec::<HashSet<usize>>::new();
+        let grid_size = self.size / self.n_grids;
+        grid_list.resize(self.num_patches, HashSet::<usize>::new());
+        for ((y, x), index) in self.map.indexed_iter() {
             if *index != 0 {
+                let grid_id = (y / grid_size) * self.n_grids + (x / grid_size);
+                grid_list[*index - 1].insert(grid_id);
                 self.areas[*index - 1] += 1;
             }
+        }
+        for (i, set) in grid_list.iter().enumerate() {
+            self.grids[i] = set.len();
         }
     }
 }

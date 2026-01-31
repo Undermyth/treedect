@@ -2,7 +2,7 @@ use fast_image_resize as fr;
 use fast_image_resize::images::Image;
 use image::RgbImage;
 use image::{DynamicImage, GenericImageView};
-use ndarray::{Array1, Array2, Array3, Array4, Ix3, s};
+use ndarray::{Array1, Array2, Array3, Array4, Axis, Ix3, concatenate, s};
 use ort::execution_providers::DirectMLExecutionProvider;
 use ort::session::Session;
 use ort::session::builder::GraphOptimizationLevel;
@@ -12,8 +12,15 @@ use std::sync::{Arc, Mutex};
 use crate::panels::palette;
 
 pub struct Dinov2Output {
-    pub segment_ids: Vec<usize>,
-    pub features: Array2<f32>, // [B, d]
+    pub segment_ids: Vec<usize>, // B ids, start from 1
+    pub features: Array2<f32>,   // [B, d]
+}
+
+impl Dinov2Output {
+    pub fn concat(&mut self, other: &Self) {
+        self.segment_ids.extend(other.segment_ids.iter());
+        self.features = concatenate![Axis(0), self.features, other.features];
+    }
 }
 
 pub struct Dinov2Batch {
