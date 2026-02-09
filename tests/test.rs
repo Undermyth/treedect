@@ -100,4 +100,38 @@ mod tests {
         let dilated_image = morphology::dilate(&image, Norm::L2, 2);
         println!("{:?}", dilated_image);
     }
+
+    #[test]
+    fn test_dinov2() {
+        use ndarray::Array;
+        use ndarray_rand::RandomExt;
+        use ndarray_rand::rand_distr::Normal;
+        use ort::execution_providers::DirectMLExecutionProvider;
+        use ort::session::Session;
+        use ort::session::builder::GraphOptimizationLevel;
+        use ort::value::TensorRef;
+
+        let x = Array::random((2, 3, 448, 448), Normal::new(0.0, 1.0).unwrap()).mapv(|x| x as f32);
+
+        let model_path = r"C:\Users\chensy\code\treedect\output_models\";
+        let onnx_path = std::path::Path::new(model_path)
+            .join("dinov2_vitb_reg.onnx")
+            .to_string_lossy()
+            .to_string();
+        log::info!("Initializing ONNX Runtime with execution provider");
+        let mut session = Session::builder()
+            .unwrap()
+            .with_optimization_level(GraphOptimizationLevel::Level3)
+            .unwrap()
+            .with_intra_threads(4)
+            .unwrap()
+            .commit_from_file(onnx_path)
+            .unwrap();
+
+        let input_tensor = TensorRef::from_array_view(&x).unwrap();
+        let output = session.run(ort::inputs!["img" => input_tensor]).unwrap();
+        let patch_tokens = &output["patch_tokens"];
+        let patch_tokens = patch_tokens.try_extract_array::<f32>().unwrap();
+        assert!(!patch_tokens.is_any_nan());
+    }
 }

@@ -3,7 +3,7 @@ use fast_image_resize::images::Image;
 use image::RgbImage;
 use image::{DynamicImage, GenericImageView};
 use ndarray::{Array1, Array2, Array3, Array4, Axis, Ix3, concatenate, s};
-use ort::execution_providers::DirectMLExecutionProvider;
+use ort::ep::DirectML;
 use ort::session::Session;
 use ort::session::builder::GraphOptimizationLevel;
 use ort::value::TensorRef;
@@ -106,7 +106,7 @@ impl Iterator for Dinov2Batcher {
                 continue;
             }
             // preprocessing. same as SAM2 but with different size
-            let [y, x, size] = palette.bboxes[self.index];
+            let [x, y, size] = palette.bboxes[self.index]; // x is width, y is height
             let patch = raw_image
                 .view(x as u32, y as u32, size as u32, size as u32)
                 .to_image();
@@ -152,6 +152,7 @@ impl Iterator for Dinov2Batcher {
                     }
                 }
             }
+
             total_token_ids.push(token_ids);
             segment_ids.push(self.index + 1);
             self.index += 1;
@@ -180,16 +181,9 @@ pub struct Dinov2Model {
 
 impl Dinov2Model {
     pub fn from_path(path: &str, initialize: bool) -> Result<Self, Box<dyn std::error::Error>> {
-        if initialize {
-            log::info!("Initializing ONNX Runtime with execution provider");
-            ort::init()
-                .with_execution_providers([DirectMLExecutionProvider::default()
-                    .build()
-                    .error_on_failure()])
-                .commit()?;
-        }
         log::info!("Loading model from: {}", path);
         let session = Session::builder()?
+            .with_execution_providers([DirectML::default().build().error_on_failure()])?
             .with_optimization_level(GraphOptimizationLevel::Level3)?
             .with_intra_threads(4)?
             .commit_from_file(path)?;

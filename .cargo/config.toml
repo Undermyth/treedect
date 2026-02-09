@@ -1,0 +1,4 @@
+[build]
+rustflags = []
+[env]
+PYO3_PYTHON = "C:/Users/chensy/code/treedect/src/models/.cluenv/python.exe"

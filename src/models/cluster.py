@@ -12,6 +12,11 @@ def cluster(ids: np.ndarray, features: np.ndarray, manual_features: np.ndarray, 
     manual_features: ndarray of shape (n_samples, n_manual_features)
     Returns: a list of length n_classes, each element is an ndarray containing the id of the samples in that cluster
     '''
+
+    # Assert that features and manual_features do not contain NaN
+    assert not np.isnan(features).any(), "features contain NaN values"
+    assert not np.isnan(manual_features).any(), "manual_features contain NaN values"
+
     # Step 1: PCA降维 - 将features从[N, d]降维到[N, 7]
     n_samples = features.shape[0]
     n_components_pca = min(7, features.shape[1], n_samples)

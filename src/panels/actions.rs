@@ -313,7 +313,8 @@ pub fn segment_action(
     let sampling_points = global.sampling_points.as_ref().unwrap().clone();
     let raw_image = global.raw_image.as_ref().unwrap();
     let width = raw_image.lock().unwrap().width() as usize;
-    let palette = palette::Palette::new(width, global.params.n_grid);
+    let mut palette = palette::Palette::new(width, global.params.n_grid);
+    palette.debug = global.detail_logging;
     let raw_image = raw_image.clone();
     let batcher = sam2::SAM2Batcher::new(
         global.params.batch_size,
@@ -430,6 +431,7 @@ pub fn classify_action(
             match result {
                 Ok(output) => {
                     if features.is_none() {
+                        assert!(!output.features.is_any_nan(), "NaN detected in features");
                         features = Some(output);
                     } else {
                         features.as_mut().unwrap().concat(&output);

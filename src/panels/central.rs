@@ -102,7 +102,21 @@ impl Canvas {
             let canvas_pos = pos - response.rect.min;
             let canvas_pos = (canvas_pos - global.canvas_state.offset) / global.canvas_state.scale;
             global.select_pos = [canvas_pos.x as usize, canvas_pos.y as usize];
-            log::info!("Selected at {:?}", global.select_pos);
+            if global.layers.len() >= 3 {
+                log::info!(
+                    "Selected at {:?}, palette index: {:?}",
+                    global.select_pos,
+                    global.layers[2]
+                        .palette
+                        .as_ref()
+                        .unwrap()
+                        .lock()
+                        .unwrap()
+                        .map[(global.select_pos[1], global.select_pos[0])]
+                );
+            } else {
+                log::info!("Selected at {:?}", global.select_pos);
+            }
         }
     }
 }

@@ -6,7 +6,7 @@ use image::RgbImage;
 use image::{DynamicImage, GenericImageView};
 use ndarray::{Array1, Array2, Array3, Array4, ArrayView2, Axis, Ix2, Ix4, array, s};
 use ndarray_stats::QuantileExt;
-use ort::execution_providers::DirectMLExecutionProvider;
+use ort::ep::DirectML;
 use ort::session::Session;
 use ort::session::builder::GraphOptimizationLevel;
 use ort::value::TensorRef;
@@ -173,21 +173,15 @@ impl SAM2Model {
         decoder_path: &str,
         initialize: bool,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        if initialize {
-            log::info!("Initializing ONNX Runtime with execution provider");
-            ort::init()
-                .with_execution_providers([DirectMLExecutionProvider::default()
-                    .build()
-                    .error_on_failure()])
-                .commit()?;
-        }
         log::info!("Loading encoder model from: {}", encoder_path);
         let encoder_session = Session::builder()?
+            .with_execution_providers([DirectML::default().build().error_on_failure()])?
             .with_optimization_level(GraphOptimizationLevel::Level3)?
             .with_intra_threads(4)?
             .commit_from_file(encoder_path)?;
         log::info!("Loading decoder model from: {}", decoder_path);
         let decoder_session = Session::builder()?
+            .with_execution_providers([DirectML::default().build().error_on_failure()])?
             .with_optimization_level(GraphOptimizationLevel::Level3)?
             .with_intra_threads(4)?
             .commit_from_file(decoder_path)?;

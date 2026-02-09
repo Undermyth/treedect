@@ -5,7 +5,7 @@ use image::{ImageBuffer, RgbImage};
 use imageproc::morphology;
 use ndarray::{Array1, Array2, Array3, Array4, ArrayView2, Ix3, array, s};
 use ndarray_stats::QuantileExt;
-use ort::execution_providers::DirectMLExecutionProvider;
+use ort::ep::DirectML;
 use ort::session::Session;
 use ort::session::builder::GraphOptimizationLevel;
 use ort::value::TensorRef;
@@ -144,16 +144,9 @@ impl DAM2Model {
         path: &str,
         initialize: bool,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        if initialize {
-            log::info!("Initializing ONNX Runtime with execution provider");
-            ort::init()
-                .with_execution_providers([DirectMLExecutionProvider::default()
-                    .build()
-                    .error_on_failure()])
-                .commit()?;
-        }
         log::info!("Loading model from: {}", path);
         let session = Session::builder()?
+            .with_execution_providers([DirectML::default().build().error_on_failure()])?
             .with_optimization_level(GraphOptimizationLevel::Level3)?
             .with_intra_threads(4)?
             .commit_from_file(path)?;

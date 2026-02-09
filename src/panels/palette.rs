@@ -28,6 +28,8 @@ pub struct Palette {
     pub areas: Vec<usize>,
     pub n_grids: usize,
     pub grids: Vec<usize>, // used to calculate the importance score
+    pub debug: bool,
+    pub cluster_map: Vec<usize>, // map from patch index (start from 0) to cluster index (start from 1)
 }
 
 impl Palette {
@@ -49,6 +51,17 @@ impl Palette {
             areas: Vec::new(),
             n_grids: n_grids,
             grids: Vec::new(),
+            debug: false,
+            cluster_map: Vec::new(),
+        }
+    }
+    pub fn set_cluster_map(&mut self, cluster: Vec<Vec<usize>>) {
+        // see `cluster.py` for the details
+        self.cluster_map.resize(self.num_patches, 0);
+        for (i, patch_ids) in cluster.iter().enumerate() {
+            for patch_id in patch_ids {
+                self.cluster_map[*patch_id - 1] = i + 1;
+            }
         }
     }
     pub fn get_statistics(&mut self) {

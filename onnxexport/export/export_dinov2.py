@@ -2,12 +2,13 @@ import torch
 import torch.nn as nn
 import onnx
 import onnxsim
+import numpy as np
 
 class DINOv2Model(nn.Module):
     def __init__(self, model):
         super().__init__()
         self.model = model
-        
+
     def forward(self, x: torch.Tensor):
         B, nc, w, h = x.shape
         x = self.model.patch_embed(x)
@@ -27,8 +28,11 @@ class DINOv2Model(nn.Module):
 
         return x_norm[:, self.model.num_register_tokens + 1 :]
 
-        
-x = torch.rand(2, 3, 448, 448)
+
+
+np.random.seed(0)
+dummy_input = np.random.randn(2, 3, 448, 448).astype(np.float32)
+x = torch.from_numpy(dummy_input)
 model = torch.hub.load('facebookresearch/dinov2', 'dinov2_vitb14_reg')
 print(model)
 model = DINOv2Model(model)
@@ -40,13 +44,14 @@ torch.onnx.export(
     model,
     x,
     filename,
-    # dynamo=True,
+    dynamo=False,
     export_params=True,
     opset_version=18,
     do_constant_folding=True,
     input_names=["img"],
     output_names=["patch_tokens"],
-    dynamic_axes={"img": {0: "batch"}}
+    dynamic_axes={"img": {0: "batch"}},
+    # external_data=False
     # dynamic_shapes=dynamic_shapes
 )
 onnx_model = onnx.load(filename)

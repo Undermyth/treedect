@@ -7,13 +7,18 @@ mod models;
 mod panels;
 
 fn main() -> eframe::Result {
-    // Parse command line arguments
-    let args: Vec<String> = std::env::args().collect();
-    let detail_logging = args.iter().any(|arg| arg == "--detail-logging");
-
     env_logger::Builder::from_default_env()
         .filter_level(log::LevelFilter::Info)
         .init();
+
+    // Parse command line arguments
+    let args: Vec<String> = std::env::args().collect();
+    log::info!("Command line arguments: {:?}", args);
+    let detail_logging = args.iter().any(|arg| arg == "--detail-logging");
+    if detail_logging {
+        log::info!("Detailed Logging is enabled");
+    }
+
     log::info!("Treedect by egui");
     log::info!("ONNX Runtime version: {}", ort::MINOR_VERSION);
     let options = eframe::NativeOptions {
