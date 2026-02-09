@@ -171,7 +171,6 @@ impl SAM2Model {
         model_rel: usize,
         encoder_path: &str,
         decoder_path: &str,
-        initialize: bool,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         log::info!("Loading encoder model from: {}", encoder_path);
         let encoder_session = Session::builder()?

@@ -10,6 +10,7 @@ use crate::models::dinov2;
 use crate::models::sam2;
 use crate::panels::global;
 use crate::panels::palette;
+use crate::utils::score;
 
 static MODEL2FILENAME: Map<&'static str, &'static str> = phf_map! {
     "sam2_small" => "sam2_hiera_small",
@@ -27,6 +28,21 @@ pub fn load_image_action(ctx: egui::Context, sender: Sender<String>) {
                 if let Some(path) = file_handle.path().to_str() {
                     let _ = sender.send(path.to_string());
                     ctx.request_repaint();
+                }
+            }
+        };
+        futures::executor::block_on(future);
+    });
+}
+pub fn save_csv_action(sender: Sender<String>) {
+    let task = rfd::AsyncFileDialog::new()
+        .add_filter("CSV Files", &["csv"])
+        .save_file();
+    std::thread::spawn(move || {
+        let future = async move {
+            if let Some(file_handle) = task.await {
+                if let Some(path) = file_handle.path().to_str() {
+                    let _ = sender.send(path.to_string());
                 }
             }
         };
@@ -74,12 +90,7 @@ pub fn load_depth_model_action(global: &mut global::GlobalState) {
             global::ProgressState::Error(format!("Depth model not found: {}", model_path));
         return;
     }
-    let mut initialize = false;
-    if !global.ort_initialized {
-        initialize = true;
-        global.ort_initialized = true;
-    }
-    let result = dam2::DAM2Model::from_path(518, &model_path, initialize);
+    let result = dam2::DAM2Model::from_path(518, &model_path);
     match result {
         Ok(model) => {
             global.depth_model = Some(Arc::new(Mutex::new(model)));
@@ -131,18 +142,11 @@ pub fn load_segment_model_action(global: &mut global::GlobalState) {
         ));
         return;
     }
-
-    let mut initialize = false;
-    if !global.ort_initialized {
-        initialize = true;
-        global.ort_initialized = true;
-    }
     let result = sam2::SAM2Model::from_path(
         // global.params.segment_rel as usize,
         1024,
         &encoder_path,
         &decoder_path,
-        initialize,
     );
     match result {
         Ok(model) => {
@@ -162,12 +166,7 @@ pub fn load_classify_model_action(global: &mut global::GlobalState) {
         .join(format!("{}.onnx", model_prefix))
         .to_string_lossy()
         .to_string();
-    let mut initialize = false;
-    if !global.ort_initialized {
-        initialize = true;
-        global.ort_initialized = true;
-    }
-    let result = dinov2::Dinov2Model::from_path(&model_path, initialize);
+    let result = dinov2::Dinov2Model::from_path(&model_path);
     if let Ok(model) = result {
         global.classify_model = Some(Arc::new(Mutex::new(model)));
     }
@@ -445,11 +444,13 @@ pub fn classify_action(
             let percent = bar.position() as f32 / length as f32;
             progress_sender.send(percent).unwrap();
         }
-        palette.lock().unwrap().get_statistics();
-        let features = parse_features(features.unwrap(), palette);
-        let output = cluster::cluster(features, n_classes);
-        log::info!("{:?}", output);
         bar.finish();
+        palette.lock().unwrap().get_statistics();
+        let features = parse_features(features.unwrap(), palette.clone());
+        let output = cluster::cluster(features, n_classes);
+        palette.lock().unwrap().set_cluster_map(output);
+
+        // log::info!("{:?}", output);
         classify_sender.send(true).unwrap();
     });
 }
@@ -471,4 +472,11 @@ fn parse_features(
         features: features.features,
         areas: valid_areas,
     }
+}
+
+pub fn get_importance_score(global: &mut global::GlobalState) {
+    let palette = global.layers[2].palette.as_ref().unwrap();
+    let palette = palette.clone();
+    let table = score::Table::build_from_palette(palette);
+    global.score_table = Some(table);
 }

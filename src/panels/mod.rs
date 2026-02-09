@@ -7,3 +7,4 @@ pub mod left;
 pub mod palette;
 pub mod params;
 pub mod right;
+pub mod table;

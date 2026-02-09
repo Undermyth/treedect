@@ -45,7 +45,7 @@ impl ParamsPanel {
                 }
 
                 if ui
-                    .add_sized([30.0, ui.available_height()], egui::Button::new("Select"))
+                    .add_sized([50.0, ui.available_height()], egui::Button::new("Select"))
                     .clicked()
                 {
                     let (sender, receiver) = channel();
@@ -66,7 +66,7 @@ impl ParamsPanel {
                         );
                     });
                 if ui
-                    .add_sized([30.0, ui.available_height()], egui::Button::new(" Load "))
+                    .add_sized([50.0, ui.available_height()], egui::Button::new(" Load "))
                     .clicked()
                 {
                     actions::load_depth_model_action(global);
@@ -85,7 +85,7 @@ impl ParamsPanel {
                         );
                     });
                 if ui
-                    .add_sized([30.0, ui.available_height()], egui::Button::new(" Load "))
+                    .add_sized([50.0, ui.available_height()], egui::Button::new(" Load "))
                     .clicked()
                 {
                     actions::load_segment_model_action(global);
@@ -104,7 +104,7 @@ impl ParamsPanel {
                         );
                     });
                 if ui
-                    .add_sized([30.0, ui.available_height()], egui::Button::new(" Load "))
+                    .add_sized([50.0, ui.available_height()], egui::Button::new(" Load "))
                     .clicked()
                 {
                     actions::load_classify_model_action(global);
@@ -142,7 +142,7 @@ impl ParamsPanel {
 
                 ui.checkbox(&mut global.params.use_height_sampling, "Enable");
                 if ui
-                    .add_sized([30.0, ui.available_height()], egui::Button::new(" Start "))
+                    .add_sized([50.0, ui.available_height()], egui::Button::new("Run"))
                     .clicked()
                 {
                     if global.layers.len() == 0 {

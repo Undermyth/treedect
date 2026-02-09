@@ -4,6 +4,7 @@ use crate::models::dam2::DAM2Model;
 use crate::models::dinov2::Dinov2Model;
 use crate::models::sam2::SAM2Model;
 use crate::panels::canvas;
+use crate::utils::score::Table;
 
 pub enum ProgressState {
     Loading(String),
@@ -80,7 +81,6 @@ pub struct GlobalState {
     pub progress_state: ProgressState,
     pub canvas_state: canvas::CanvasState,
     pub params: Params,
-    pub ort_initialized: bool,
     pub detail_logging: bool,
     pub depth_model: Option<Arc<Mutex<DAM2Model>>>,
     pub segment_model: Option<Arc<Mutex<SAM2Model>>>,
@@ -88,6 +88,8 @@ pub struct GlobalState {
     pub raw_image: Option<Arc<Mutex<image::RgbImage>>>,
     pub sampling_points: Option<Vec<[usize; 2]>>,
     pub select_pos: [usize; 2],
+    pub score_table: Option<Table>,
+    pub sorted: bool,
 }
 
 impl GlobalState {
@@ -97,7 +99,6 @@ impl GlobalState {
             canvas_state: canvas::CanvasState::default(),
             progress_state: ProgressState::Finished,
             params: Params::new(),
-            ort_initialized: false,
             detail_logging: detail_logging,
             depth_model: None,
             segment_model: None,
@@ -105,6 +106,8 @@ impl GlobalState {
             raw_image: None,
             sampling_points: None,
             select_pos: [0, 0],
+            score_table: None,
+            sorted: false,
         }
     }
 }

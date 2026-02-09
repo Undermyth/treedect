@@ -180,7 +180,7 @@ pub struct Dinov2Model {
 }
 
 impl Dinov2Model {
-    pub fn from_path(path: &str, initialize: bool) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn from_path(path: &str) -> Result<Self, Box<dyn std::error::Error>> {
         log::info!("Loading model from: {}", path);
         let session = Session::builder()?
             .with_execution_providers([DirectML::default().build().error_on_failure()])?

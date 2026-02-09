@@ -105,6 +105,21 @@ impl LayerImage {
         }
         LayerImage::EguiImage(image_data)
     }
+    pub fn from_palette_cluster(palette: Arc<Mutex<palette::Palette>>) -> Self {
+        let palette = palette.lock().unwrap();
+        let mut image_data =
+            egui::ColorImage::filled([palette.size, palette.size], egui::Color32::TRANSPARENT);
+        for ((y, x), index) in palette.map.indexed_iter() {
+            if *index != 0 {
+                image_data[(x, y)] = egui::Color32::from_rgb(
+                    palette.color_map[palette.cluster_map[index - 1]].r,
+                    palette.color_map[palette.cluster_map[index - 1]].g,
+                    palette.color_map[palette.cluster_map[index - 1]].b,
+                );
+            }
+        }
+        LayerImage::EguiImage(image_data)
+    }
     pub fn get_pixel(&self, x: usize, y: usize) -> palette::RGBPixel {
         match self {
             LayerImage::RGBAImage(image) => {
@@ -228,6 +243,19 @@ impl Layer {
             texture: None,
             editable: true,
             palette: Some(Arc::new(Mutex::new(palette))),
+        }
+    }
+
+    pub fn from_palette_cluster(name: String, palette: Arc<Mutex<palette::Palette>>) -> Self {
+        let image = LayerImage::from_palette_cluster(palette);
+        Self {
+            name,
+            visible: true,
+            opacity: 0.7,
+            raw_image: Some(image),
+            texture: None,
+            editable: true,
+            palette: None,
         }
     }
 

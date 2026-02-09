@@ -21,6 +21,7 @@ impl RGBPixel {
 pub struct Palette {
     pub size: usize,
     pub num_patches: usize,
+    pub num_clusters: usize,
     pub map: Array2<usize>,
     pub color_map: [RGBPixel; MAX_PALETTE_SIZE],
     pub bboxes: Vec<[usize; 3]>,
@@ -44,6 +45,7 @@ impl Palette {
         Self {
             size,
             num_patches: 0,
+            num_clusters: 0,
             map: Array2::zeros([size, size]),
             color_map,
             bboxes: Vec::new(),
@@ -58,6 +60,7 @@ impl Palette {
     pub fn set_cluster_map(&mut self, cluster: Vec<Vec<usize>>) {
         // see `cluster.py` for the details
         self.cluster_map.resize(self.num_patches, 0);
+        self.num_clusters = cluster.len();
         for (i, patch_ids) in cluster.iter().enumerate() {
             for patch_id in patch_ids {
                 self.cluster_map[*patch_id - 1] = i + 1;

@@ -139,11 +139,7 @@ pub struct DAM2Output {
 }
 
 impl DAM2Model {
-    pub fn from_path(
-        model_rel: usize,
-        path: &str,
-        initialize: bool,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn from_path(model_rel: usize, path: &str) -> Result<Self, Box<dyn std::error::Error>> {
         log::info!("Loading model from: {}", path);
         let session = Session::builder()?
             .with_execution_providers([DirectML::default().build().error_on_failure()])?

@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::panels::actions;
 use crate::panels::canvas;
+use crate::panels::canvas::Layer;
 use crate::panels::canvas::LayerImage;
 use crate::panels::components;
 use crate::panels::global;
@@ -111,7 +112,7 @@ impl ActionPanel {
             if let Some(receiver) = &self.segment_receiver {
                 if let Ok(palette) = receiver.try_recv() {
                     global.layers.push(canvas::Layer::from_palette(
-                        "Segmentation Layer".to_string(),
+                        "Segmentation".to_string(),
                         palette,
                     ));
                     self.segment_progress_receiver = None;
@@ -159,7 +160,15 @@ impl ActionPanel {
                 }
             }
             if let Some(receiver) = &self.classify_receiver {
-                if let Ok(finished) = receiver.try_recv() {
+                if let Ok(_finished) = receiver.try_recv() {
+                    let palette = global.layers[2].palette.as_ref().unwrap();
+                    let palette = palette.clone();
+                    global.layers.push(Layer::from_palette_cluster(
+                        "Classification".to_string(),
+                        palette,
+                    ));
+                    global.layers[2].visible = false;
+                    actions::get_importance_score(global);
                     self.classify_progress_receiver = None;
                     self.classify_receiver = None;
                 }
