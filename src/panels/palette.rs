@@ -84,6 +84,25 @@ impl Palette {
             self.grids[i] = set.len();
         }
     }
+    pub fn clear_empty_segments(&mut self) {
+        self.get_statistics();
+        let mut new_bboxes = Vec::<[usize; 3]>::new();
+        let mut new_areas = Vec::<usize>::new();
+        let mut new_grids = Vec::<usize>::new();
+        self.num_patches = 0;
+        for (i, area) in self.areas.iter().enumerate() {
+            if *area != 0 && self.valid[i] {
+                new_bboxes.push(self.bboxes[i]);
+                new_areas.push(*area);
+                new_grids.push(self.grids[i]);
+            }
+        }
+        self.num_patches = new_bboxes.len();
+        self.bboxes = new_bboxes;
+        self.areas = new_areas;
+        self.grids = new_grids;
+        self.valid.resize(self.num_patches, true);
+    }
     pub fn get_id_at_position(&self, pos: [usize; 2]) -> Option<usize> {
         let index = self.map[(pos[1], pos[0])];
         if index != 0 {

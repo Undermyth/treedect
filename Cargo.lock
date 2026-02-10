@@ -4607,6 +4607,7 @@ dependencies = [
  "serde_json",
  "tiff",
  "tokio",
+ "walkdir",
 ]
 
 [[package]]

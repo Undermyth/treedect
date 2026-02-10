@@ -3,13 +3,9 @@ use eframe::{egui, epaint};
 use crate::panels::actions;
 use crate::panels::canvas;
 use crate::panels::global;
-use crate::panels::palette;
 
-use egui_plot::Legend;
-use egui_plot::Line;
 use egui_plot::Plot;
-use egui_plot::Text;
-use egui_plot::{PlotPoint, PlotPoints};
+use egui_plot::PlotPoint;
 
 pub struct Canvas {}
 
@@ -97,6 +93,9 @@ impl Canvas {
                         return;
                     }
                     for (i, cluster_id) in palette.cluster_map.iter().enumerate() {
+                        if *cluster_id == 0 {
+                            continue;
+                        }
                         let [x, y, size] = palette.bboxes[i];
                         let mut pos_on_canvas =
                             egui::Vec2::new((x + size / 2) as f32, (y + size / 2) as f32);

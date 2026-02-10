@@ -1,4 +1,10 @@
+# Cargo 配置文件
+# 用于设置 PyO3 和构建设置
+
 [build]
 rustflags = []
+
 [env]
-PYO3_PYTHON = "C:/Users/chensy/code/treedect/src/models/.cluenv/python.exe"
+# 告诉 PyO3 使用我们打包的 Python 环境
+# 使用绝对路径确保编译时能正确找到 Python
+PYO3_PYTHON = { value = "pyenv/install/python.exe", relative = true }

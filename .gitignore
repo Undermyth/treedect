@@ -1,5 +1,6 @@
 /target
 **/output_models
 **/__pycache__
-**/.cluenv
+pyenv
 *.ttf
+dist/

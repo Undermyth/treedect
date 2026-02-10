@@ -1,6 +1,4 @@
 use eframe::egui;
-use ndarray::Array2;
-use rand::Rng;
 use std::sync::{Arc, Mutex};
 
 use crate::panels::palette;

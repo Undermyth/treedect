@@ -3,12 +3,65 @@
 use eframe::egui;
 use eframe::egui::Visuals;
 use eframe::epaint::text::{FontInsert, InsertFontFamily};
+use std::env;
+use std::path::PathBuf;
 
 mod models;
 mod panels;
 mod utils;
 
+/// 初始化 Python 环境变量，必须在任何 Python 操作之前调用
+fn init_python_environment() {
+    // 获取可执行文件所在目录
+    if let Ok(exe_path) = env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            let python_home = exe_dir.join("python");
+
+            // 检查 Python 环境是否存在
+            if python_home.exists() {
+                // 设置 PYTHONHOME - 这是 Python 找到标准库的关键
+                unsafe {
+                    env::set_var("PYTHONHOME", &python_home);
+                }
+
+                // 设置 PYTHONPATH - 包含 Lib 和 DLLs
+                let lib_path = python_home.join("Lib");
+                let dlls_path = python_home.join("DLLs");
+                let python_path = format!(
+                    "{};{}",
+                    lib_path.to_string_lossy(),
+                    dlls_path.to_string_lossy()
+                );
+                unsafe {
+                    env::set_var("PYTHONPATH", python_path);
+                }
+
+                // 设置 PYTHONNOUSERSITE=1 避免加载用户 site-packages
+                unsafe {
+                    env::set_var("PYTHONNOUSERSITE", "1");
+                }
+
+                // 禁用 PYTHONDONTWRITEBYTECODE 避免生成 .pyc 文件
+                unsafe {
+                    env::set_var("PYTHONDONTWRITEBYTECODE", "1");
+                }
+
+                eprintln!("[PythonEnv] PYTHONHOME set to: {}", python_home.display());
+            } else {
+                eprintln!(
+                    "[PythonEnv] Warning: Python environment not found at: {}",
+                    python_home.display()
+                );
+            }
+        }
+    }
+}
+
 fn main() -> eframe::Result {
+    // 必须在最开始就初始化 Python 环境变量
+    // 这样 PyO3 初始化 Python 时就能正确找到标准库
+    init_python_environment();
+
     env_logger::Builder::from_default_env()
         .filter_level(log::LevelFilter::Info)
         .init();

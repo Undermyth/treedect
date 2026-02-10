@@ -307,8 +307,9 @@ pub fn filter_sampling_action(
                 return false;
             }
 
-            // Green should be the dominant color
-            g > r && g > b
+            // // Green should be the dominant color
+            // g > r && g > b
+            true
         })
         .cloned()
         .collect()
@@ -484,8 +485,11 @@ pub fn classify_action(
             let result = model.lock().unwrap().forward(batch);
             match result {
                 Ok(output) => {
+                    assert!(
+                        !output.features.is_any_nan(),
+                        "NaN detected in extracted features"
+                    );
                     if features.is_none() {
-                        assert!(!output.features.is_any_nan(), "NaN detected in features");
                         features = Some(output);
                     } else {
                         features.as_mut().unwrap().concat(&output);
@@ -502,6 +506,7 @@ pub fn classify_action(
         bar.finish();
         palette.lock().unwrap().get_statistics();
         let features = parse_features(features.unwrap(), palette.clone());
+        assert!(!features.features.is_any_nan(), "NaN detected in features");
         let output = cluster::cluster(features, n_classes);
         palette.lock().unwrap().set_cluster_map(output);
 

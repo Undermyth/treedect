@@ -114,11 +114,12 @@ impl ActionPanel {
                 }
             }
             if let Some(receiver) = &self.segment_receiver {
-                if let Ok(palette) = receiver.try_recv() {
+                if let Ok(mut palette) = receiver.try_recv() {
                     global.layers.push(canvas::Layer::from_palette(
                         "Segmentation".to_string(),
                         &palette,
                     ));
+                    palette.clear_empty_segments();
                     global.palette = Some(Arc::new(Mutex::new(palette)));
                     global.progress_state =
                         global::ProgressState::Finished("Segmentation finished".to_string());

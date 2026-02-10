@@ -2,6 +2,7 @@
 name = "treedect"
 version = "0.1.0"
 edition = "2024"
+build = "build.rs"
 
 [dependencies]
 ab_glyph = "0.2.29"
@@ -29,3 +30,6 @@ rfd = "0.16.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 tokio = { version = "1.0", features = ["full"] }
+
+[build-dependencies]
+walkdir = "2.5.0"
