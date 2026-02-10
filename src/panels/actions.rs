@@ -360,7 +360,7 @@ pub fn segment_action(
 }
 
 pub fn point_segment_action(global: &mut global::GlobalState) {
-    let palette = global.layers[2].palette.as_ref().unwrap();
+    let palette = global.palette.as_ref().unwrap();
     let palette = palette.clone();
     let sampling_points = global.sampling_points.as_ref().unwrap().clone();
     let raw_image = global.raw_image.as_ref().unwrap();
@@ -407,7 +407,7 @@ pub fn classify_action(
 ) {
     let raw_image = global.raw_image.as_ref().unwrap();
     let raw_image = raw_image.clone();
-    let palette = global.layers[2].palette.as_ref().unwrap();
+    let palette = global.palette.as_ref().unwrap();
     let mut batcher =
         dinov2::Dinov2Batcher::new(global.params.batch_size, raw_image, palette.clone());
     let palette = palette.clone();
@@ -475,7 +475,7 @@ fn parse_features(
 }
 
 pub fn get_importance_score(global: &mut global::GlobalState) {
-    let palette = global.layers[2].palette.as_ref().unwrap();
+    let palette = global.palette.as_ref().unwrap();
     let palette = palette.clone();
     let table = score::Table::build_from_palette(palette);
     global.score_table = Some(table);

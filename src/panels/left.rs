@@ -113,8 +113,9 @@ impl ActionPanel {
                 if let Ok(palette) = receiver.try_recv() {
                     global.layers.push(canvas::Layer::from_palette(
                         "Segmentation".to_string(),
-                        palette,
+                        &palette,
                     ));
+                    global.palette = Some(Arc::new(Mutex::new(palette)));
                     self.segment_progress_receiver = None;
                     self.segment_receiver = None;
                 }
@@ -161,7 +162,7 @@ impl ActionPanel {
             }
             if let Some(receiver) = &self.classify_receiver {
                 if let Ok(_finished) = receiver.try_recv() {
-                    let palette = global.layers[2].palette.as_ref().unwrap();
+                    let palette = global.palette.as_ref().unwrap();
                     let palette = palette.clone();
                     global.layers.push(Layer::from_palette_cluster(
                         "Classification".to_string(),

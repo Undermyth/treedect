@@ -42,6 +42,7 @@ pub fn update_drag_and_zoom(
         canvas_state.scale = initial_scale;
         canvas_state.offset = initial_offset;
         canvas_state.initialized = true;
+        log::info!("canvas size: {canvas_size:?}");
         log::info!("initial_scale: {initial_scale:?}");
         log::info!("initial_offset: {initial_offset:?}");
         log::info!("image_size: {image_size:?}");
@@ -165,7 +166,6 @@ pub struct Layer {
     // below for editable layers. If the layer is not editable, palette
     // and other data structure will not be maintained.
     pub editable: bool,
-    pub palette: Option<Arc<Mutex<palette::Palette>>>,
 }
 
 impl Layer {
@@ -189,7 +189,6 @@ impl Layer {
             raw_image: Some(LayerImage::EguiImage(image_data)),
             texture: None,
             editable: false,
-            palette: None,
         }
     }
 
@@ -210,12 +209,11 @@ impl Layer {
             // image_data: egui::ColorImage::from_rgba_premultiplied(size, pixels.as_slice()),
             texture: None,
             editable: false,
-            palette: None,
         })
     }
 
-    pub fn from_palette(name: String, palette: palette::Palette) -> Self {
-        let image = LayerImage::from_palette(&palette);
+    pub fn from_palette(name: String, palette: &palette::Palette) -> Self {
+        let image = LayerImage::from_palette(palette);
         let image = if palette.debug {
             if let LayerImage::EguiImage(mut image_data) = image {
                 for bbox in palette.bboxes.iter() {
@@ -242,7 +240,6 @@ impl Layer {
             raw_image: Some(image),
             texture: None,
             editable: true,
-            palette: Some(Arc::new(Mutex::new(palette))),
         }
     }
 
@@ -255,7 +252,6 @@ impl Layer {
             raw_image: Some(image),
             texture: None,
             editable: true,
-            palette: None,
         }
     }
 
@@ -333,48 +329,15 @@ impl Layer {
             raw_image: Some(LayerImage::EguiImage(image_data)),
             texture: None,
             editable: false,
-            palette: None,
         }
     }
 
-    pub fn get_id_at_position(&self, pos: [usize; 2]) -> Option<usize> {
-        if let Some(palette) = &self.palette {
-            let palette = palette.lock().unwrap();
-            let index = palette.map[(pos[1], pos[0])];
-            if index != 0 {
-                return Some(index);
-            } else {
-                return None;
-            }
-        }
-        None
-    }
-
-    pub fn rerender(&mut self) {
-        let new_image = self.palette.as_ref().unwrap().lock().unwrap();
-        let new_image = LayerImage::from_palette(&new_image);
-        if let LayerImage::EguiImage(image_data) = new_image {
+    pub fn rerender(&mut self, image: LayerImage) {
+        if let LayerImage::EguiImage(image_data) = image {
             self.texture
                 .as_mut()
                 .unwrap()
                 .set(image_data, egui::TextureOptions::default());
-        }
-    }
-
-    pub fn remove_segment_at(&mut self, pos: [usize; 2]) {
-        let segment_id = self.get_id_at_position(pos);
-        if let Some(segment_id) = segment_id {
-            let new_map = self
-                .palette
-                .as_mut()
-                .unwrap()
-                .lock()
-                .unwrap()
-                .map
-                .mapv(|x| if x == segment_id { 0 } else { x });
-            self.palette.as_mut().unwrap().lock().unwrap().map = new_map;
-            self.palette.as_mut().unwrap().lock().unwrap().valid[segment_id - 1] = false;
-            self.rerender();
         }
     }
 

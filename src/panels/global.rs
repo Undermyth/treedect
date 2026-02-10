@@ -4,6 +4,7 @@ use crate::models::dam2::DAM2Model;
 use crate::models::dinov2::Dinov2Model;
 use crate::models::sam2::SAM2Model;
 use crate::panels::canvas;
+use crate::panels::palette;
 use crate::utils::score::Table;
 
 pub enum ProgressState {
@@ -87,6 +88,7 @@ pub struct GlobalState {
     pub classify_model: Option<Arc<Mutex<Dinov2Model>>>,
     pub raw_image: Option<Arc<Mutex<image::RgbImage>>>,
     pub sampling_points: Option<Vec<[usize; 2]>>,
+    pub palette: Option<Arc<Mutex<palette::Palette>>>,
     pub select_pos: [usize; 2],
     pub score_table: Option<Table>,
     pub sorted: bool,
@@ -105,6 +107,7 @@ impl GlobalState {
             classify_model: None,
             raw_image: None,
             sampling_points: None,
+            palette: None,
             select_pos: [0, 0],
             score_table: None,
             sorted: false,

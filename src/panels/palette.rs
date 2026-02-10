@@ -84,4 +84,20 @@ impl Palette {
             self.grids[i] = set.len();
         }
     }
+    pub fn get_id_at_position(&self, pos: [usize; 2]) -> Option<usize> {
+        let index = self.map[(pos[1], pos[0])];
+        if index != 0 {
+            return Some(index);
+        } else {
+            return None;
+        }
+    }
+    pub fn remove_segment_at(&mut self, pos: [usize; 2]) {
+        let segment_id = self.get_id_at_position(pos);
+        if let Some(segment_id) = segment_id {
+            let new_map = self.map.mapv(|x| if x == segment_id { 0 } else { x });
+            self.map = new_map;
+            self.valid[segment_id - 1] = false;
+        }
+    }
 }

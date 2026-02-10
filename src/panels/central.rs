@@ -3,6 +3,13 @@ use eframe::{egui, epaint};
 use crate::panels::actions;
 use crate::panels::canvas;
 use crate::panels::global;
+use crate::panels::palette;
+
+use egui_plot::Legend;
+use egui_plot::Line;
+use egui_plot::Plot;
+use egui_plot::Text;
+use egui_plot::{PlotPoint, PlotPoints};
 
 pub struct Canvas {}
 
@@ -68,18 +75,82 @@ impl Canvas {
                 egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), // UV 坐标
                 tint,
             );
+
+            // if let Some(palette) = &layer.palette {
+            //     let palette = palette.clone();
+            //     let palette = palette.lock().unwrap();
+            //     if palette.num_clusters == 0 {
+            //         continue;
+            //     }
+            //     for (i, cluster_id) in palette.cluster_map.iter().enumerate() {
+            //         let [x, y, size] = palette.bboxes[i];
+            //         let mut pos_on_canvas =
+            //             egui::Vec2::new((x + size / 2) as f32, (y + size / 2) as f32);
+            //         pos_on_canvas =
+            //             pos_on_canvas * global.canvas_state.scale + global.canvas_state.offset;
+
+            //         if pos_on_canvas.x > canvas_size.x || pos_on_canvas.y > canvas_size.y {
+            //             continue;
+            //         }
+            //         let pos_on_canvas = response.rect.min + pos_on_canvas;
+            //         clipped_painter.text(
+            //             pos_on_canvas,
+            //             egui::Align2::CENTER_CENTER,
+            //             (cluster_id + 1).to_string(),
+            //             egui::FontId::proportional(10.0 * global.canvas_state.scale),
+            //             egui::Color32::WHITE,
+            //         );
+            //     }
+            // }
         }
+
+        // 使用 Area 容器在 painter 区域上重叠显示 plot
+        egui::Area::new(egui::Id::new("overlay_plot"))
+            .fixed_pos(response.rect.min)
+            .interactable(false)
+            .show(ctx, |ui| {
+                ui.set_width(response.rect.width());
+                ui.set_height(response.rect.height());
+
+                let my_plot = Plot::new("My Plot")
+                    .legend(Legend::default())
+                    .show_background(false)
+                    .show_axes([false, false])
+                    .show_grid([false, false])
+                    .allow_zoom([false, false])
+                    .allow_scroll([false, false])
+                    .allow_drag([false, false])
+                    .invert_y(true)
+                    .default_x_bounds(0.0, response.rect.width() as f64)
+                    .default_y_bounds(0.0, response.rect.height() as f64);
+
+                // let's create a dummy line in the plot
+                // let graph: Vec<[f64; 2]> = vec![[0.0, 1.0], [2.0, 3.0], [3.0, 2.0]];
+                let _inner = my_plot.show(ui, |plot_ui| {
+                    // plot_ui.line(Line::new("curve", PlotPoints::from(graph)));
+                    plot_ui.text(egui_plot::Text::new(
+                        "Hello",
+                        PlotPoint::new(900, 750),
+                        "Hello",
+                    ));
+                });
+            });
 
         // 4. 注册右键菜单
         response.context_menu(|ui| {
             ui.label("Canvas Menu");
             if ui.button("Delete Selection").clicked() {
-                global.layers[2].remove_segment_at(global.select_pos);
+                let palette = global.palette.as_ref().unwrap().clone();
+                let mut palette = palette.lock().unwrap();
+                palette.remove_segment_at(global.select_pos);
+                global.layers[2].rerender(canvas::LayerImage::from_palette(&palette));
             }
             if ui.button("Segment Here").clicked() {
                 global.sampling_points = Some(vec![global.select_pos]);
                 actions::point_segment_action(global);
-                global.layers[2].rerender();
+                let palette = global.palette.as_ref().unwrap().clone();
+                let palette = palette.lock().unwrap();
+                global.layers[2].rerender(canvas::LayerImage::from_palette(&palette));
             }
             if ui.button("Reset View").clicked() {
                 global.canvas_state.offset = egui::Vec2::ZERO;
@@ -106,13 +177,8 @@ impl Canvas {
                 log::info!(
                     "Selected at {:?}, palette index: {:?}",
                     global.select_pos,
-                    global.layers[2]
-                        .palette
-                        .as_ref()
-                        .unwrap()
-                        .lock()
-                        .unwrap()
-                        .map[(global.select_pos[1], global.select_pos[0])]
+                    global.palette.as_ref().unwrap().lock().unwrap().map
+                        [(global.select_pos[1], global.select_pos[0])]
                 );
             } else {
                 log::info!("Selected at {:?}", global.select_pos);

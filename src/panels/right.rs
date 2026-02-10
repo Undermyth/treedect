@@ -1,5 +1,5 @@
 use eframe::egui;
-use std::sync::mpsc::{Receiver, Sender};
+use std::sync::mpsc::Receiver;
 
 use crate::panels::actions;
 use crate::panels::global;
