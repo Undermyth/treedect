@@ -32,17 +32,6 @@ impl Canvas {
             epaint::StrokeKind::Inside,
         );
 
-        if global.layers.len() > 0 {
-            let image_size = global.layers[0].get_image_size();
-            canvas::update_drag_and_zoom(
-                ui,
-                &response,
-                &mut global.canvas_state,
-                canvas_size,
-                image_size,
-            );
-        }
-
         // 2. 循环绘制图层
         for layer in &mut global.layers {
             if !layer.visible || layer.opacity <= 0.0 {
@@ -104,16 +93,16 @@ impl Canvas {
             // }
         }
 
-        // 使用 Area 容器在 painter 区域上重叠显示 plot
-        egui::Area::new(egui::Id::new("overlay_plot"))
+        // 使用 Area 容器在 painter 区域上重叠显示 plot，并处理交互
+        let plot_area_response = egui::Area::new(egui::Id::new("overlay_plot"))
             .fixed_pos(response.rect.min)
-            .interactable(false)
+            .interactable(true) // 设为可交互，以接收鼠标事件
             .show(ctx, |ui| {
                 ui.set_width(response.rect.width());
                 ui.set_height(response.rect.height());
 
                 let my_plot = Plot::new("My Plot")
-                    .legend(Legend::default())
+                    // .legend(Legend::default())
                     .show_background(false)
                     .show_axes([false, false])
                     .show_grid([false, false])
@@ -126,18 +115,44 @@ impl Canvas {
 
                 // let's create a dummy line in the plot
                 // let graph: Vec<[f64; 2]> = vec![[0.0, 1.0], [2.0, 3.0], [3.0, 2.0]];
-                let _inner = my_plot.show(ui, |plot_ui| {
+                let plot_response = my_plot.show(ui, |plot_ui| {
                     // plot_ui.line(Line::new("curve", PlotPoints::from(graph)));
                     plot_ui.text(egui_plot::Text::new(
                         "Hello",
-                        PlotPoint::new(900, 750),
+                        PlotPoint::new(500, 500),
                         "Hello",
                     ));
                 });
-            });
 
-        // 4. 注册右键菜单
-        response.context_menu(|ui| {
+                // 返回 plot 的 response 用于交互处理
+                plot_response.response
+            })
+            .inner;
+
+        // 优先使用 plot_area_response 处理交互，如果不可用则回退到 painter 的 response
+        let interaction_response = if plot_area_response.hovered()
+            || plot_area_response.clicked()
+            || plot_area_response.dragged()
+        {
+            &plot_area_response
+        } else {
+            &response
+        };
+
+        // 处理拖拽和缩放交互
+        if global.layers.len() > 0 {
+            let image_size = global.layers[0].get_image_size();
+            canvas::update_drag_and_zoom(
+                ui,
+                interaction_response,
+                &mut global.canvas_state,
+                canvas_size,
+                image_size,
+            );
+        }
+
+        // 4. 注册右键菜单 - 使用 plot_area_response
+        plot_area_response.context_menu(|ui| {
             ui.label("Canvas Menu");
             if ui.button("Delete Selection").clicked() {
                 let palette = global.palette.as_ref().unwrap().clone();
@@ -168,8 +183,10 @@ impl Canvas {
         });
 
         // 记录右键点击坐标
-        if response.secondary_clicked() {
-            let pos = response.interact_pointer_pos().unwrap_or_default();
+        if plot_area_response.secondary_clicked() {
+            let pos = plot_area_response
+                .interact_pointer_pos()
+                .unwrap_or_default();
             let canvas_pos = pos - response.rect.min;
             let canvas_pos = (canvas_pos - global.canvas_state.offset) / global.canvas_state.scale;
             global.select_pos = [canvas_pos.x as usize, canvas_pos.y as usize];
