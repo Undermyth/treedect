@@ -8,6 +8,7 @@ use crate::models::cluster;
 use crate::models::dam2;
 use crate::models::dinov2;
 use crate::models::sam2;
+use crate::panels::canvas;
 use crate::panels::global;
 use crate::panels::palette;
 use crate::utils::score;
@@ -49,7 +50,21 @@ pub fn save_csv_action(sender: Sender<String>) {
         futures::executor::block_on(future);
     });
 }
-
+pub fn save_img_action(sender: Sender<String>) {
+    let task = rfd::AsyncFileDialog::new()
+        .add_filter("Image Files", &["tif", "tiff"])
+        .save_file();
+    std::thread::spawn(move || {
+        let future = async move {
+            if let Some(file_handle) = task.await {
+                if let Some(path) = file_handle.path().to_str() {
+                    let _ = sender.send(path.to_string());
+                }
+            }
+        };
+        futures::executor::block_on(future);
+    });
+}
 pub fn select_model_path_action(sender: Sender<String>) {
     let task = rfd::AsyncFileDialog::new().pick_folder();
     std::thread::spawn(move || {
@@ -519,4 +534,191 @@ pub fn get_importance_score(global: &mut global::GlobalState) {
     let palette = palette.clone();
     let table = score::Table::build_from_palette(palette);
     global.score_table = Some(table);
+}
+
+pub fn export_image_action(global: &mut global::GlobalState, path: String) {
+    // 1. 获取图像尺寸（从第一个可见图层）
+    let (width, height) = {
+        let first_visible = global.layers.iter().find(|l| l.visible);
+        match first_visible {
+            Some(layer) => {
+                let size = layer.get_image_size();
+                (size[0], size[1])
+            }
+            None => {
+                log::error!("No visible layers to export");
+                global.progress_state =
+                    global::ProgressState::Error("No visible layers to export".to_string());
+                return;
+            }
+        }
+    };
+
+    // 2. 创建RGBA缓冲区（支持透明背景）
+    let mut output_image = image::RgbaImage::new(width as u32, height as u32);
+
+    // 3. 遍历所有可见图层并叠加
+    for layer in &global.layers {
+        if !layer.visible || layer.opacity <= 0.0 {
+            continue;
+        }
+
+        // 从raw_image获取RGB数据
+        let Some(ref raw_image) = layer.raw_image else {
+            continue;
+        };
+
+        // 根据LayerImage类型提取像素数据
+        match raw_image {
+            canvas::LayerImage::RGBImage(img) => {
+                blend_rgb_image(&mut output_image, img, layer.opacity);
+            }
+            canvas::LayerImage::RGBAImage(img) => {
+                blend_rgba_image(&mut output_image, img, layer.opacity);
+            }
+            canvas::LayerImage::EguiImage(img) => {
+                blend_egui_image(&mut output_image, img, layer.opacity);
+            }
+        }
+    }
+
+    // 4. 添加文字层（如果show_cluster_ids=true且palette存在且有clusters）
+    if global.params.show_cluster_ids {
+        if let Some(ref palette_arc) = global.palette {
+            let palette = palette_arc.lock().unwrap();
+            if palette.num_clusters > 0 {
+                // 加载嵌入字体
+                let font_data = include_bytes!("../IosevkaTermNerdFont-Regular.ttf");
+                let font = ab_glyph::FontArc::try_from_slice(font_data)
+                    .expect("Failed to load embedded font");
+
+                // 字体大小固定为20
+                let font_size = 200.0;
+                let scale = ab_glyph::PxScale {
+                    x: font_size,
+                    y: font_size,
+                };
+
+                // 绘制每个cluster的文字
+                for (i, cluster_id) in palette.cluster_map.iter().enumerate() {
+                    let [x, y, size] = palette.bboxes[i];
+                    let center_x = (x + size / 2) as i32;
+                    let center_y = (y + size / 2) as i32;
+
+                    let text = cluster_id.to_string();
+
+                    // 使用imageproc绘制白色文字
+                    let color = image::Rgba([255, 255, 255, 255]);
+                    output_image = imageproc::drawing::draw_text(
+                        &output_image,
+                        color,
+                        center_x,
+                        center_y,
+                        scale,
+                        &font,
+                        &text,
+                    );
+                }
+            }
+        }
+    }
+
+    // 5. 保存为TIFF文件
+    let path = std::path::Path::new(&path);
+    match std::fs::File::create(path) {
+        Ok(file) => {
+            let mut encoder =
+                tiff::encoder::TiffEncoder::new(file).expect("Failed to create TIFF encoder");
+
+            // 将RGBA数据转换为RGB数据（TIFF通常不保存alpha通道，但我们可以尝试保存带透明度的）
+            // 或者直接保存RGBA
+            let width = output_image.width();
+            let height = output_image.height();
+            let data = output_image.into_raw();
+
+            if let Err(e) =
+                encoder.write_image::<tiff::encoder::colortype::RGBA8>(width, height, &data)
+            {
+                log::error!("Failed to write TIFF file: {}", e);
+                global.progress_state =
+                    global::ProgressState::Error(format!("Failed to write TIFF file: {}", e));
+            } else {
+                log::info!("Image exported successfully to: {:?}", path);
+                global.progress_state =
+                    global::ProgressState::Finished(format!("Image exported to: {:?}", path));
+            }
+        }
+        Err(e) => {
+            log::error!("Failed to create output file: {}", e);
+            global.progress_state =
+                global::ProgressState::Error(format!("Failed to create output file: {}", e));
+        }
+    }
+}
+
+/// 将RGB图像混合到输出缓冲区
+fn blend_rgb_image(output: &mut image::RgbaImage, input: &image::RgbImage, opacity: f32) {
+    let (width, height) = (output.width() as usize, output.height() as usize);
+    let input_width = input.width() as usize;
+    let input_height = input.height() as usize;
+
+    for y in 0..height.min(input_height) {
+        for x in 0..width.min(input_width) {
+            let src_pixel = input.get_pixel(x as u32, y as u32);
+            let dst_pixel = output.get_pixel_mut(x as u32, y as u32);
+
+            // 应用opacity进行alpha混合
+            let alpha = opacity;
+            dst_pixel[0] = blend_channel(dst_pixel[0], src_pixel[0], alpha);
+            dst_pixel[1] = blend_channel(dst_pixel[1], src_pixel[1], alpha);
+            dst_pixel[2] = blend_channel(dst_pixel[2], src_pixel[2], alpha);
+            dst_pixel[3] = (255.0 * alpha + dst_pixel[3] as f32 * (1.0 - alpha)) as u8;
+        }
+    }
+}
+
+/// 将RGBA图像混合到输出缓冲区
+fn blend_rgba_image(output: &mut image::RgbaImage, input: &image::RgbaImage, opacity: f32) {
+    let (width, height) = (output.width() as usize, output.height() as usize);
+    let input_width = input.width() as usize;
+    let input_height = input.height() as usize;
+
+    for y in 0..height.min(input_height) {
+        for x in 0..width.min(input_width) {
+            let src_pixel = input.get_pixel(x as u32, y as u32);
+            let dst_pixel = output.get_pixel_mut(x as u32, y as u32);
+
+            // 应用opacity和源alpha进行混合
+            let src_alpha = (src_pixel[3] as f32 / 255.0) * opacity;
+            dst_pixel[0] = blend_channel(dst_pixel[0], src_pixel[0], src_alpha);
+            dst_pixel[1] = blend_channel(dst_pixel[1], src_pixel[1], src_alpha);
+            dst_pixel[2] = blend_channel(dst_pixel[2], src_pixel[2], src_alpha);
+            dst_pixel[3] = (src_alpha * 255.0 + dst_pixel[3] as f32 * (1.0 - src_alpha)) as u8;
+        }
+    }
+}
+
+/// 将egui ColorImage混合到输出缓冲区
+fn blend_egui_image(output: &mut image::RgbaImage, input: &egui::ColorImage, opacity: f32) {
+    let (width, height) = (output.width() as usize, output.height() as usize);
+    let [input_width, input_height] = input.size;
+
+    for y in 0..height.min(input_height) {
+        for x in 0..width.min(input_width) {
+            let src_pixel = input[(x, y)];
+            let dst_pixel = output.get_pixel_mut(x as u32, y as u32);
+
+            // 应用opacity和源alpha进行混合
+            let src_alpha = (src_pixel.a() as f32 / 255.0) * opacity;
+            dst_pixel[0] = blend_channel(dst_pixel[0], src_pixel.r(), src_alpha);
+            dst_pixel[1] = blend_channel(dst_pixel[1], src_pixel.g(), src_alpha);
+            dst_pixel[2] = blend_channel(dst_pixel[2], src_pixel.b(), src_alpha);
+            dst_pixel[3] = (src_alpha * 255.0 + dst_pixel[3] as f32 * (1.0 - src_alpha)) as u8;
+        }
+    }
+}
+
+/// 混合单个颜色通道
+fn blend_channel(dst: u8, src: u8, alpha: f32) -> u8 {
+    (src as f32 * alpha + dst as f32 * (1.0 - alpha)) as u8
 }

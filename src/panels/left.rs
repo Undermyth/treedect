@@ -18,6 +18,7 @@ pub struct ActionPanel {
     segment_receiver: Option<Receiver<palette::Palette>>,
     classify_progress_receiver: Option<Receiver<f32>>,
     classify_receiver: Option<Receiver<bool>>,
+    image_save_receiver: Option<Receiver<String>>,
 }
 
 impl ActionPanel {
@@ -29,6 +30,7 @@ impl ActionPanel {
             segment_receiver: None,
             classify_progress_receiver: None,
             classify_receiver: None,
+            image_save_receiver: None,
         }
     }
 
@@ -210,6 +212,26 @@ impl ActionPanel {
                 self.classify_progress_receiver = Some(progress_receiver);
                 self.classify_receiver = Some(classify_receiver);
                 actions::classify_action(global, progress_sender, classify_sender);
+            }
+        });
+
+        ui.vertical_centered_justified(|ui| {
+            if let Some(receiver) = &self.image_save_receiver {
+                if let Ok(path) = receiver.try_recv() {
+                    actions::export_image_action(global, path);
+                    self.image_save_receiver = None;
+                }
+            }
+            if ui
+                .add(components::wide_button(
+                    "Export Image...",
+                    ui.available_width(),
+                ))
+                .clicked()
+            {
+                let (sender, receiver) = channel();
+                self.image_save_receiver = Some(receiver);
+                actions::save_img_action(sender);
             }
         });
     }

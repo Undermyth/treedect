@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+ab_glyph = "0.2.29"
 bytemuck = { version = "1.24.0", features = ["extern_crate_alloc"] }
 eframe = "0.33.2"
 egui_extras = "0.33.3"
@@ -11,8 +12,9 @@ egui_plot = "0.34.0"
 env_logger = "0.11.8"
 fast_image_resize = { version = "5.4.0", features = ["bytemuck", "image", "rayon"] }
 futures = "0.3.31"
-image = { version = "0.25.9", features = ["rayon"] }
+image = { version = "0.25.9", features = ["rayon", "tiff"] }
 imageproc = { version = "0.26.0", features = ["rayon"] }
+tiff = "0.10.0"
 indicatif = { version = "0.18.3", features = ["rayon"] }
 log = "0.4.29"
 ndarray = { version = "0.17.2", features = ["rayon"] }
