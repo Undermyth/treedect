@@ -46,11 +46,12 @@ impl ActionPanel {
                             }
                             global.layers.clear();
                             global.layers.push(layer);
-                            global.progress_state = global::ProgressState::Finished;
+                            global.progress_state =
+                                global::ProgressState::Finished("Image loaded".to_string());
                         }
                         Err(e) => {
                             eprintln!("Failed to load image: {}", e);
-                            global.progress_state = global::ProgressState::Finished;
+                            global.progress_state = global::ProgressState::Error(e.to_string());
                         }
                     }
                     // 清除接收器
@@ -107,6 +108,7 @@ impl ActionPanel {
                         "Running Segmentation".to_string(),
                         progress,
                     );
+                    ui.ctx().request_repaint();
                 }
             }
             if let Some(receiver) = &self.segment_receiver {
@@ -116,6 +118,9 @@ impl ActionPanel {
                         &palette,
                     ));
                     global.palette = Some(Arc::new(Mutex::new(palette)));
+                    global.progress_state =
+                        global::ProgressState::Finished("Segmentation finished".to_string());
+                    ui.ctx().request_repaint();
                     self.segment_progress_receiver = None;
                     self.segment_receiver = None;
                 }
@@ -157,7 +162,8 @@ impl ActionPanel {
                     global.progress_state = global::ProgressState::Processing(
                         "Running Classification".to_string(),
                         progress,
-                    )
+                    );
+                    ui.ctx().request_repaint();
                 }
             }
             if let Some(receiver) = &self.classify_receiver {
@@ -170,6 +176,9 @@ impl ActionPanel {
                     ));
                     global.layers[2].visible = false;
                     actions::get_importance_score(global);
+                    ui.ctx().request_repaint();
+                    global.progress_state =
+                        global::ProgressState::Finished("Classification finished".to_string());
                     self.classify_progress_receiver = None;
                     self.classify_receiver = None;
                 }

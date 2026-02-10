@@ -10,7 +10,7 @@ use crate::utils::score::Table;
 pub enum ProgressState {
     Loading(String),
     Processing(String, f32),
-    Finished,
+    Finished(String),
     Error(String),
 }
 
@@ -45,8 +45,6 @@ pub struct Params {
     pub grid_sampling_interval: usize,
     /// batch size for both segmentation and classification. (should be <= 4 as limited by ONNX bugs)
     pub batch_size: usize,
-    /// mask extraction threshold. higher value will result in smaller masks.
-    pub mask_threshold: f32,
     /// radius for local maximum dilation. larger value will result in sparser sampling points.
     pub dilation_radius: usize,
     /// radius for NMS. larger value will result in sparser sampling points.
@@ -55,6 +53,8 @@ pub struct Params {
     pub n_grid: usize,
     /// number of classes for clustering.
     pub n_classes: usize,
+    /// whether to display the cluster ids.
+    pub show_cluster_ids: bool,
 }
 
 impl Params {
@@ -68,11 +68,11 @@ impl Params {
             use_height_sampling: false,
             grid_sampling_interval: 320,
             batch_size: 4,
-            mask_threshold: 0.0,
             dilation_radius: 70,
             nms_radius: 150,
             n_grid: 4,
             n_classes: 5,
+            show_cluster_ids: true,
         }
     }
 }
@@ -99,7 +99,7 @@ impl GlobalState {
         Self {
             layers: Vec::<canvas::Layer>::new(),
             canvas_state: canvas::CanvasState::default(),
-            progress_state: ProgressState::Finished,
+            progress_state: ProgressState::Finished("All processing finished".to_string()),
             params: Params::new(),
             detail_logging: detail_logging,
             depth_model: None,

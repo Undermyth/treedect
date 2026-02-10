@@ -15,6 +15,10 @@ pub struct CanvasState {
     drag_start: Option<egui::Pos2>,
     /// 是否初始化
     initialized: bool,
+    /// 加载图像之后自动缩放的偏移
+    pub initial_offset: egui::Vec2,
+    /// 加载图像之后自动缩放的比例
+    pub initial_scale: f32,
 }
 
 impl Default for CanvasState {
@@ -24,6 +28,8 @@ impl Default for CanvasState {
             scale: 1.0,
             drag_start: None,
             initialized: false,
+            initial_offset: egui::Vec2::ZERO,
+            initial_scale: 1.0,
         }
     }
 }
@@ -42,6 +48,8 @@ pub fn update_drag_and_zoom(
         canvas_state.scale = initial_scale;
         canvas_state.offset = initial_offset;
         canvas_state.initialized = true;
+        canvas_state.initial_scale = initial_scale;
+        canvas_state.initial_offset = initial_offset;
         log::info!("canvas size: {canvas_size:?}");
         log::info!("initial_scale: {initial_scale:?}");
         log::info!("initial_offset: {initial_offset:?}");

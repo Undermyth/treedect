@@ -228,13 +228,6 @@ impl ParamsPanel {
                 );
                 ui.end_row();
 
-                ui.label("Mask Threshold");
-                ui.add_sized(
-                    ui.available_size_before_wrap(),
-                    egui::DragValue::new(&mut global.params.mask_threshold).speed(0.02),
-                );
-                ui.end_row();
-
                 ui.label("Dilation Radius");
                 ui.add_sized(
                     ui.available_size_before_wrap(),
@@ -265,6 +258,10 @@ impl ParamsPanel {
                     ui.available_size_before_wrap(),
                     egui::DragValue::new(&mut global.params.n_classes).speed(1),
                 );
+                ui.end_row();
+
+                ui.label("Show Cluster IDs");
+                ui.checkbox(&mut global.params.show_cluster_ids, "Show");
                 ui.end_row();
             });
     }

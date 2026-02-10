@@ -94,9 +94,13 @@ pub fn load_depth_model_action(global: &mut global::GlobalState) {
     match result {
         Ok(model) => {
             global.depth_model = Some(Arc::new(Mutex::new(model)));
+            global.progress_state =
+                global::ProgressState::Finished(format!("Depth model {model_name} loaded"));
         }
         Err(e) => {
             log::error!("Error when loading ONNX depth model: {e}");
+            global.progress_state =
+                global::ProgressState::Error(format!("Error when loading ONNX depth model: {e}"));
         }
     }
 }
@@ -151,24 +155,58 @@ pub fn load_segment_model_action(global: &mut global::GlobalState) {
     match result {
         Ok(model) => {
             global.segment_model = Some(Arc::new(Mutex::new(model)));
+            global.progress_state =
+                global::ProgressState::Finished(format!("Segmentation model {model_name} loaded"));
         }
         Err(e) => {
             log::error!("Error when loading ONNX segmentation model: {e}");
+            global.progress_state = global::ProgressState::Error(format!(
+                "Error when loading ONNX segmentation model: {e}"
+            ));
         }
     }
 }
 
 pub fn load_classify_model_action(global: &mut global::GlobalState) {
-    let model_prefix = MODEL2FILENAME
-        .get(global.params.classify_model_name.as_deref().unwrap_or(""))
-        .unwrap();
+    let model_name = match global.params.classify_model_name.as_deref() {
+        Some(name) => name,
+        None => {
+            global.progress_state =
+                global::ProgressState::Error("No classification model selected".to_string());
+            return;
+        }
+    };
+    let model_prefix = match MODEL2FILENAME.get(model_name) {
+        Some(prefix) => prefix,
+        None => {
+            global.progress_state =
+                global::ProgressState::Error(format!("Unknown classification model: {model_name}"));
+            return;
+        }
+    };
     let model_path = std::path::Path::new(&global.params.model_dir)
         .join(format!("{}.onnx", model_prefix))
         .to_string_lossy()
         .to_string();
+    if !std::path::Path::new(&model_path).exists() {
+        global.progress_state =
+            global::ProgressState::Error(format!("Classification model not found: {}", model_path));
+        return;
+    }
     let result = dinov2::Dinov2Model::from_path(&model_path);
-    if let Ok(model) = result {
-        global.classify_model = Some(Arc::new(Mutex::new(model)));
+    match result {
+        Ok(model) => {
+            global.classify_model = Some(Arc::new(Mutex::new(model)));
+            global.progress_state = global::ProgressState::Finished(format!(
+                "Classification model {model_name} loaded"
+            ));
+        }
+        Err(e) => {
+            log::error!("Error when loading ONNX classification model: {e}");
+            global.progress_state = global::ProgressState::Error(format!(
+                "Error when loading ONNX classification model: {e}"
+            ));
+        }
     }
 }
 
@@ -322,7 +360,8 @@ pub fn segment_action(
         raw_image,
     );
     let model = global.segment_model.as_mut().unwrap().clone();
-    let mask_threshold = global.params.mask_threshold;
+    // let mask_threshold = global.params.mask_threshold;
+    let mask_threshold = 0.0;
     std::thread::spawn(move || {
         let palette = Arc::new(Mutex::new(palette)); // no competition here. only for interface compatibility
         let bar = ProgressBar::new(sampling_points.len() as u64);
@@ -372,7 +411,8 @@ pub fn point_segment_action(global: &mut global::GlobalState) {
         raw_image,
     );
     let model = global.segment_model.as_mut().unwrap().clone();
-    let mask_threshold = global.params.mask_threshold;
+    // let mask_threshold = global.params.mask_threshold;
+    let mask_threshold = 0.0;
     let bar = ProgressBar::new(sampling_points.len() as u64);
     bar.set_style(
         indicatif::ProgressStyle::with_template(

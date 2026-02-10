@@ -64,33 +64,6 @@ impl Canvas {
                 egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), // UV 坐标
                 tint,
             );
-
-            // if let Some(palette) = &layer.palette {
-            //     let palette = palette.clone();
-            //     let palette = palette.lock().unwrap();
-            //     if palette.num_clusters == 0 {
-            //         continue;
-            //     }
-            //     for (i, cluster_id) in palette.cluster_map.iter().enumerate() {
-            //         let [x, y, size] = palette.bboxes[i];
-            //         let mut pos_on_canvas =
-            //             egui::Vec2::new((x + size / 2) as f32, (y + size / 2) as f32);
-            //         pos_on_canvas =
-            //             pos_on_canvas * global.canvas_state.scale + global.canvas_state.offset;
-
-            //         if pos_on_canvas.x > canvas_size.x || pos_on_canvas.y > canvas_size.y {
-            //             continue;
-            //         }
-            //         let pos_on_canvas = response.rect.min + pos_on_canvas;
-            //         clipped_painter.text(
-            //             pos_on_canvas,
-            //             egui::Align2::CENTER_CENTER,
-            //             (cluster_id + 1).to_string(),
-            //             egui::FontId::proportional(10.0 * global.canvas_state.scale),
-            //             egui::Color32::WHITE,
-            //         );
-            //     }
-            // }
         }
 
         // 使用 Area 容器在 painter 区域上重叠显示 plot，并处理交互
@@ -113,15 +86,33 @@ impl Canvas {
                     .default_x_bounds(0.0, response.rect.width() as f64)
                     .default_y_bounds(0.0, response.rect.height() as f64);
 
-                // let's create a dummy line in the plot
-                // let graph: Vec<[f64; 2]> = vec![[0.0, 1.0], [2.0, 3.0], [3.0, 2.0]];
                 let plot_response = my_plot.show(ui, |plot_ui| {
-                    // plot_ui.line(Line::new("curve", PlotPoints::from(graph)));
-                    plot_ui.text(egui_plot::Text::new(
-                        "Hello",
-                        PlotPoint::new(500, 500),
-                        "Hello",
-                    ));
+                    if global.palette.is_none() || !global.params.show_cluster_ids {
+                        return;
+                    }
+                    let palette = global.palette.as_ref().unwrap();
+                    let palette = palette.clone();
+                    let palette = palette.lock().unwrap();
+                    if palette.num_clusters == 0 {
+                        return;
+                    }
+                    for (i, cluster_id) in palette.cluster_map.iter().enumerate() {
+                        let [x, y, size] = palette.bboxes[i];
+                        let mut pos_on_canvas =
+                            egui::Vec2::new((x + size / 2) as f32, (y + size / 2) as f32);
+                        pos_on_canvas =
+                            pos_on_canvas * global.canvas_state.scale + global.canvas_state.offset;
+                        let font_size =
+                            18.0 * global.canvas_state.scale / global.canvas_state.initial_scale;
+                        let text = egui::RichText::new(cluster_id.to_string())
+                            .size(font_size)
+                            .color(egui::Color32::WHITE);
+                        plot_ui.text(egui_plot::Text::new(
+                            cluster_id.to_string(),
+                            PlotPoint::new(pos_on_canvas.x, pos_on_canvas.y),
+                            text,
+                        ))
+                    }
                 });
 
                 // 返回 plot 的 response 用于交互处理
@@ -225,9 +216,9 @@ impl Progress {
                         .show_percentage(),
                 );
             }),
-            global::ProgressState::Finished => ui.horizontal(|ui| {
+            global::ProgressState::Finished(text) => ui.horizontal(|ui| {
                 ui.colored_label(egui::Color32::GREEN, "●");
-                ui.label("All processing finished");
+                ui.label(text);
             }),
             global::ProgressState::Error(text) => ui.horizontal(|ui| {
                 ui.colored_label(egui::Color32::RED, "●");
