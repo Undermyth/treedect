@@ -44,7 +44,23 @@ fn copy_python_env(target_dir: &Path) {
         python_dest.display()
     );
 
-    // 复制核心 DLL 到二进制目录（便于加载）
+    // 1. 复制核心 DLL 到二进制目录（便于加载）
+    copy_core_dlls(&python_src, target_dir);
+
+    // 2. 复制 DLLs 目录（Python 扩展模块 .pyd 文件）
+    copy_dlls_directory(&python_src, &python_dest);
+
+    // 3. 复制 Lib 目录（Python 标准库）
+    copy_lib_directory(&python_src, &python_dest);
+
+    // 4. 复制 site-packages（第三方包）
+    copy_site_packages(&python_src, &python_dest);
+
+    println!("cargo:warning=Python environment setup complete");
+}
+
+/// 复制核心 DLL 文件到二进制目录
+fn copy_core_dlls(python_src: &Path, target_dir: &Path) {
     let core_dlls = vec![
         "python311.dll",
         "python3.dll",
@@ -62,243 +78,92 @@ fn copy_python_env(target_dir: &Path) {
             println!("cargo:warning=Warning: {} not found", dll);
         }
     }
-
-    // 复制 DLLs 目录（Python 标准库扩展 - 包含 .pyd 文件）
-    copy_dir_with_filter(
-        &python_src.join("DLLs"),
-        &python_dest.join("DLLs"),
-        |path| !should_exclude_dll(path),
-    );
-
-    // 统计复制的 .pyd 文件数量
-    let pyd_count = WalkDir::new(&python_dest.join("DLLs"))
-        .into_iter()
-        .filter(|e| {
-            if let Ok(entry) = e {
-                entry.path().extension().map_or(false, |ext| ext == "pyd")
-            } else {
-                false
-            }
-        })
-        .count();
-    println!("cargo:warning=Copied {} .pyd files to DLLs/", pyd_count);
-
-    // 创建 Lib 目录结构
-    let lib_src = python_src.join("Lib");
-    let lib_dest = python_dest.join("Lib");
-    fs::create_dir_all(&lib_dest).unwrap();
-
-    // 复制精简后的标准库
-    copy_minimal_stdlib(&lib_src, &lib_dest);
-
-    // 复制必需的第三方包
-    let site_packages_src = lib_src.join("site-packages");
-    let site_packages_dest = lib_dest.join("site-packages");
-
-    if site_packages_src.exists() {
-        fs::create_dir_all(&site_packages_dest).unwrap();
-        copy_required_packages(&site_packages_src, &site_packages_dest);
-    }
-
-    println!("cargo:warning=Python environment setup complete");
 }
 
-fn copy_dir_with_filter<F>(src: &Path, dst: &Path, filter: F)
-where
-    F: Fn(&Path) -> bool,
-{
-    if !src.exists() {
+/// 复制 DLLs 目录（包含 .pyd 扩展模块）
+fn copy_dlls_directory(python_src: &Path, python_dest: &Path) {
+    let dlls_src = python_src.join("DLLs");
+    let dlls_dest = python_dest.join("DLLs");
+
+    if dlls_src.exists() {
+        println!("cargo:warning=Copying DLLs directory...");
+        copy_directory_simple(&dlls_src, &dlls_dest);
+
+        // 统计复制的 .pyd 文件
+        let pyd_count = WalkDir::new(&dlls_dest)
+            .into_iter()
+            .filter(|e| {
+                if let Ok(entry) = e {
+                    entry.path().extension().map_or(false, |ext| ext == "pyd")
+                } else {
+                    false
+                }
+            })
+            .count();
+        println!("cargo:warning=Copied {} .pyd files to DLLs/", pyd_count);
+    }
+}
+
+/// 复制 Lib 目录（Python 标准库）
+fn copy_lib_directory(python_src: &Path, python_dest: &Path) {
+    let lib_src = python_src.join("Lib");
+    let lib_dest = python_dest.join("Lib");
+
+    if !lib_src.exists() {
+        println!("cargo:warning=Warning: Lib directory not found");
         return;
     }
 
-    fs::create_dir_all(dst).unwrap();
+    fs::create_dir_all(&lib_dest).unwrap();
+    println!("cargo:warning=Copying Lib directory...");
 
-    for entry in WalkDir::new(src) {
+    // 遍历 Lib 目录下的所有项目
+    for entry in fs::read_dir(&lib_src).unwrap() {
         let entry = entry.unwrap();
         let path = entry.path();
+        let name = entry.file_name().to_string_lossy().to_string();
 
-        if !filter(path) {
+        // 跳过 site-packages（单独处理）
+        if name == "site-packages" {
             continue;
         }
 
-        let relative = path.strip_prefix(src).unwrap();
-        let dest_path = dst.join(relative);
-
-        if path.is_file() {
-            fs::create_dir_all(dest_path.parent().unwrap()).unwrap();
-            fs::copy(path, dest_path).unwrap();
-        } else if path.is_dir() && !should_exclude_dir(path) {
-            fs::create_dir_all(&dest_path).unwrap();
-        }
-    }
-}
-
-fn copy_dir(src: &Path, dst: &Path) {
-    copy_dir_with_filter(src, dst, |_| true);
-}
-
-fn should_exclude_dll(path: &Path) -> bool {
-    let path_str = path.to_string_lossy().to_lowercase();
-
-    // 排除测试相关的 DLL
-    let exclusions = vec!["_test", "test_"];
-
-    for ex in &exclusions {
-        if path_str.contains(ex) {
-            return true;
-        }
-    }
-
-    false
-}
-
-fn should_exclude_dir(path: &Path) -> bool {
-    let path_str = path.to_string_lossy().to_lowercase();
-
-    let exclusions = vec!["__pycache__", "test", "tests", "testing"];
-
-    for ex in &exclusions {
-        if path_str.contains(ex) {
-            return true;
-        }
-    }
-
-    false
-}
-
-fn copy_minimal_stdlib(src: &Path, dst: &Path) {
-    // 复制标准库的核心目录，排除测试和文档
-    // 策略：复制关键目录中的所有文件，而不是维护一个模块列表
-
-    let essential_dirs = vec![
-        "encodings",       // 编码支持（Python启动必需）
-        "collections",     // 数据结构
-        "logging",         // 日志
-        "importlib",       // 导入系统
-        "json",            // JSON
-        "re",              // 正则表达式
-        "decimal",         // 十进制运算
-        "email",           // 邮件处理（logging依赖）
-        "html",            // HTML处理
-        "http",            // HTTP支持
-        "urllib",          // URL处理
-        "xml",             // XML支持
-        "ctypes",          // C类型
-        "multiprocessing", // 多进程
-        "concurrent",      // 并发
-        "asyncio",         // 异步IO
-        "unittest",        // 单元测试（某些库依赖）
-    ];
-
-    // 需要完整复制的目录（不排除 test 子目录）
-    let full_copy_dirs = vec!["unittest"];
-
-    // 复制关键目录
-    for dir in &essential_dirs {
-        let src_path = src.join(dir);
-        let dst_path = dst.join(dir);
-        if src_path.exists() {
-            if full_copy_dirs.contains(&dir.as_ref()) {
-                // 完整复制（不排除 test 子目录）
-                println!("cargo:warning=Full copying directory: {}", dir);
-                copy_package_full(&src_path, &dst_path);
-            } else {
-                // 标准复制（排除 test 子目录）
-                println!("cargo:warning=Copying directory: {}", dir);
-                copy_dir_with_filter(&src_path, &dst_path, |p| {
-                    !should_exclude_file(p) && !should_exclude_dir(p)
-                });
-            }
-        }
-    }
-
-    // 复制所有 .py 文件（除去测试文件）
-    // 这样确保所有模块依赖都被满足
-    println!("cargo:warning=Copying all Python files from Lib directory...");
-    for entry in WalkDir::new(src).max_depth(1) {
-        let entry = entry.unwrap();
-        let path = entry.path();
-
-        // 跳过目录（已经处理过关键目录）
+        // 跳过已知不需要的目录
         if path.is_dir() {
-            let dir_name = path.file_name().unwrap().to_string_lossy();
-            // 排除特定目录
-            if dir_name.starts_with("test")
-                || dir_name.starts_with("__pycache__")
-                || dir_name.starts_with("distutils")
-                || dir_name.starts_with("ensurepip")
-                || dir_name.starts_with("venv")
-                || dir_name.starts_with("lib2to3")
-                || dir_name.starts_with("idlelib")
-                || dir_name.starts_with("tkinter")
-                || dir_name.starts_with("turtledemo")
-                || dir_name.starts_with("pydoc_data")
-            {
-                continue;
-            }
-            // 已经复制过的目录跳过
-            if essential_dirs.contains(&dir_name.as_ref()) {
+            let skip_dirs = [
+                "__pycache__",
+                "test",
+                "tests",
+                "idlelib",
+                "tkinter",
+                "turtledemo",
+                "pydoc_data",
+                "distutils",
+                "ensurepip",
+                "venv",
+                "lib2to3",
+            ];
+
+            if skip_dirs.contains(&name.as_str()) {
                 continue;
             }
         }
 
-        // 复制文件
-        if path.is_file() && path.extension().map_or(false, |ext| ext == "py") {
-            let file_name = path.file_name().unwrap().to_string_lossy();
-
-            // 排除测试文件
-            if file_name.starts_with("test")
-                || file_name.contains("_test")
-                || file_name.starts_with("__")
-            {
-                continue;
-            }
-
-            let dst_path = dst.join(&*file_name);
-            fs::copy(path, dst_path).unwrap();
-        }
-    }
-
-    // 特别处理：确保 encodings 目录存在且完整
-    let encodings_src = src.join("encodings");
-    let encodings_dst = dst.join("encodings");
-    if encodings_src.exists() {
-        println!("cargo:warning=Copying encodings directory...");
-        copy_dir_with_filter(&encodings_src, &encodings_dst, |p| !should_exclude_file(p));
-
-        // 验证 encodings 目录是否复制成功
-        if encodings_dst.exists() {
-            let count = WalkDir::new(&encodings_dst)
-                .into_iter()
-                .filter(|e| e.as_ref().unwrap().path().is_file())
-                .count();
-            println!("cargo:warning=Copied {} files to encodings/", count);
-        }
-    } else {
-        println!(
-            "cargo:warning=ERROR: encodings directory not found at {:?}",
-            encodings_src
-        );
-    }
-
-    // 特别处理：复制以 _ 开头的私有模块（如 _collections_abc.py）
-    for entry in WalkDir::new(src).max_depth(1) {
-        let entry = entry.unwrap();
-        let path = entry.path();
+        let dest_path = lib_dest.join(&name);
 
         if path.is_file() {
-            let file_name = path.file_name().unwrap().to_string_lossy();
-            if file_name.starts_with("_") && file_name.ends_with(".py") {
-                let dst_path = dst.join(&*file_name);
-                if !dst_path.exists() {
-                    fs::copy(path, dst_path).unwrap();
-                }
+            // 复制 .py 文件
+            if path.extension().map_or(false, |ext| ext == "py") {
+                fs::copy(&path, &dest_path).unwrap();
             }
+        } else if path.is_dir() {
+            // 递归复制目录
+            copy_directory_simple(&path, &dest_path);
         }
     }
 
-    // 统计复制的文件数量
-    let py_count = WalkDir::new(dst)
+    // 统计复制的文件数
+    let py_count = WalkDir::new(&lib_dest)
         .into_iter()
         .filter(|e| {
             if let Ok(entry) = e {
@@ -311,41 +176,51 @@ fn copy_minimal_stdlib(src: &Path, dst: &Path) {
     println!("cargo:warning=Copied {} Python files to Lib/", py_count);
 }
 
-fn should_exclude_file(path: &Path) -> bool {
-    let path_str = path.to_string_lossy().to_lowercase();
+/// 复制 site-packages 目录
+fn copy_site_packages(python_src: &Path, python_dest: &Path) {
+    let site_src = python_src.join("Lib").join("site-packages");
+    let site_dest = python_dest.join("Lib").join("site-packages");
 
-    // 排除测试文件和缓存
-    if path_str.contains("__pycache__") {
-        return true;
+    if !site_src.exists() {
+        println!("cargo:warning=Warning: site-packages not found");
+        return;
     }
 
-    if path_str.ends_with(".pyc") || path_str.ends_with(".pyo") {
-        return true;
-    }
+    fs::create_dir_all(&site_dest).unwrap();
+    println!("cargo:warning=Copying site-packages...");
 
-    // 排除测试文件，但保留运行必需的测试相关模块
-    // 注意：某些包虽然名字里有 test，但不是测试文件，而是运行时必需的
-    if path_str.contains("_test") || path_str.contains("test_") {
-        // 例外：保留运行必需的测试工具模块
-        let runtime_test_modules = [
-            "_testutils",
-            "_tester",
-            "numpy.testing",
-            "scipy._lib._testutils",
-        ];
-        for module in &runtime_test_modules {
-            if path_str.contains(module) {
-                return false;
+    // 遍历 site-packages 下的所有项目
+    for entry in fs::read_dir(&site_src).unwrap() {
+        let entry = entry.unwrap();
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().to_string();
+
+        let dest_path = site_dest.join(&name);
+
+        if path.is_file() {
+            // 复制所有文件（包括单文件模块如 threadpoolctl.py）
+            if should_copy_file(&path) {
+                fs::copy(&path, &dest_path).unwrap();
+            }
+        } else if path.is_dir() {
+            // 复制所有目录（包括包目录如 numpy, scipy, tqdm 等）
+            if should_copy_dir(&name) {
+                println!("cargo:warning=  Copying: {}", name);
+                copy_directory_simple(&path, &dest_path);
             }
         }
-        return true;
     }
 
-    false
+    // 统计复制的包数
+    let (dir_count, file_count) = count_site_packages(&site_dest);
+    println!(
+        "cargo:warning=Copied {} packages/directories and {} single-file modules",
+        dir_count, file_count
+    );
 }
 
-// 完整复制一个包（只排除 __pycache__ 和 .pyc/.pyo 文件，不排除 test 目录）
-fn copy_package_full(src: &Path, dst: &Path) {
+/// 简单复制目录 - 只排除 __pycache__ 和编译后的 .pyc/.pyo 文件
+fn copy_directory_simple(src: &Path, dst: &Path) {
     if !src.exists() {
         return;
     }
@@ -353,99 +228,90 @@ fn copy_package_full(src: &Path, dst: &Path) {
     fs::create_dir_all(dst).unwrap();
 
     for entry in WalkDir::new(src) {
-        let entry = entry.unwrap();
+        let entry = match entry {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+
         let path = entry.path();
-
-        // 只排除 __pycache__ 和 .pyc/.pyo 文件
-        let path_str = path.to_string_lossy().to_lowercase();
-        if path_str.contains("__pycache__")
-            || path_str.ends_with(".pyc")
-            || path_str.ends_with(".pyo")
-        {
-            continue;
-        }
-
         let relative = path.strip_prefix(src).unwrap();
         let dest_path = dst.join(relative);
 
         if path.is_file() {
-            fs::create_dir_all(dest_path.parent().unwrap()).unwrap();
+            // 检查是否应该复制此文件
+            if !should_copy_file(path) {
+                continue;
+            }
+
+            if let Some(parent) = dest_path.parent() {
+                fs::create_dir_all(parent).unwrap();
+            }
             fs::copy(path, dest_path).unwrap();
         } else if path.is_dir() {
+            // 检查目录名
+            let dir_name = path.file_name().unwrap_or_default().to_string_lossy();
+            if dir_name == "__pycache__" {
+                continue;
+            }
+
             fs::create_dir_all(&dest_path).unwrap();
         }
     }
 }
 
-fn copy_required_packages(src: &Path, dst: &Path) {
-    // 需要完整复制的关键包（科学计算库，依赖关系复杂）
-    let full_copy_packages = vec!["numpy", "sklearn", "scipy", "umap"];
+/// 判断是否应该复制文件 - 只排除编译缓存文件
+fn should_copy_file(path: &Path) -> bool {
+    let path_str = path.to_string_lossy().to_lowercase();
 
-    // 其他第三方包（可以使用过滤）
-    let other_packages = vec![
-        "numba",
-        "llvmlite",
-        "joblib",
-        "pynndescent",
-        "threadpoolctl",
-        "colorama",
-    ];
+    // 排除 __pycache__ 目录中的文件
+    if path_str.contains("__pycache__") {
+        return false;
+    }
 
-    // 完整复制关键包（只排除 __pycache__ 和 .pyc 文件，不排除 test 目录）
-    for package in &full_copy_packages {
-        let pkg_src = src.join(package);
-        if pkg_src.exists() {
-            let pkg_dst = dst.join(package);
-            println!("cargo:warning=Full copying package: {}", package);
-            // 使用专门的函数复制，不排除 test 目录
-            copy_package_full(&pkg_src, &pkg_dst);
-        } else {
-            println!("cargo:warning=Warning: Package '{}' not found", package);
+    // 排除 .pyc 和 .pyo 文件
+    if let Some(ext) = path.extension() {
+        let ext = ext.to_string_lossy().to_lowercase();
+        if ext == "pyc" || ext == "pyo" {
+            return false;
         }
     }
 
-    // 复制其他包（使用标准过滤）
-    for package in &other_packages {
-        let pkg_src = src.join(package);
-        if pkg_src.exists() {
-            let pkg_dst = dst.join(package);
-            println!("cargo:warning=Copying package: {}", package);
-            copy_dir_with_filter(&pkg_src, &pkg_dst, |p| !should_exclude_file(p));
-        }
-    }
+    true
+}
 
-    // 复制所有包的 .libs/.lib/_libs 目录（DLL 依赖）
-    let all_packages: Vec<&str> = full_copy_packages
-        .iter()
-        .chain(other_packages.iter())
-        .copied()
-        .collect();
+/// 判断是否应该复制目录
+fn should_copy_dir(name: &str) -> bool {
+    // 只排除 __pycache__ 目录
+    name != "__pycache__"
+}
 
-    for package in &all_packages {
-        let lib_patterns = vec![
-            format!("{}.libs", package),
-            format!("{}.lib", package),
-            format!("{}_libs", package),
-        ];
+/// 统计 site-packages 中的包数量
+fn count_site_packages(site_dir: &Path) -> (usize, usize) {
+    let mut dir_count = 0;
+    let mut file_count = 0;
 
-        for lib_pattern in &lib_patterns {
-            let libs_src = src.join(lib_pattern);
-            if libs_src.exists() {
-                let libs_dst = dst.join(lib_pattern);
-                println!("cargo:warning=  Copying libs: {}", lib_pattern);
-                copy_dir_with_filter(&libs_src, &libs_dst, |_| true);
-            }
-        }
+    if let Ok(entries) = fs::read_dir(site_dir) {
+        for entry in entries {
+            if let Ok(entry) = entry {
+                let path = entry.path();
+                let name = entry.file_name().to_string_lossy().to_string();
 
-        // 复制 .dist-info 目录
-        let dist_info_name = format!("{}-", package.replace("_", "-"));
-        for entry in fs::read_dir(src).unwrap() {
-            let entry = entry.unwrap();
-            let name = entry.file_name().to_string_lossy().to_string();
-            if name.starts_with(&dist_info_name) && name.ends_with(".dist-info") {
-                let dist_dst = dst.join(&name);
-                copy_dir_with_filter(&entry.path(), &dist_dst, |_| true);
+                if path.is_dir() {
+                    // 统计包目录（排除 .dist-info 和 .libs 等元数据目录）
+                    if !name.ends_with(".dist-info")
+                        && !name.ends_with(".libs")
+                        && !name.ends_with(".lib")
+                        && !name.ends_with("_libs")
+                    {
+                        dir_count += 1;
+                    }
+                } else if path.is_file() && name.ends_with(".py") {
+                    // 统计单文件模块
+                    file_count += 1;
+                }
             }
         }
     }
+
+    (dir_count, file_count)
 }

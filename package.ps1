@@ -144,23 +144,8 @@ if (Test-Path $pythonEnvSource) {
     exit 1
 }
 
-# 7. 清理不必要的文件以减少体积
-Write-Color "Cleaning up unnecessary files..." "Yellow"
-
-# 删除测试文件
-$testPatterns = @(
-    "*test*.py",
-    "*_test.py",
-    "tests",
-    "test",
-    "testing"
-)
-
-foreach ($pattern in $testPatterns) {
-    Get-ChildItem -Path $pythonEnvDest -Recurse -Filter $pattern -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name -match "^test|^tests|_test\.py$|test_" } |
-        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-}
+# 7. 清理编译缓存文件（保留所有功能模块，包括测试相关）
+Write-Color "Cleaning up cache files..." "Yellow"
 
 # 删除 __pycache__
 Get-ChildItem -Path $pythonEnvDest -Recurse -Directory -Filter "__pycache__" -ErrorAction SilentlyContinue |
