@@ -10,8 +10,8 @@ from sam2.build_sam import build_sam2
 from sam2.modeling.sam2_base import SAM2Base
 from sam2.sam2_image_predictor import SAM2ImagePredictor
 
-from onnxconverter_common import float16
-from onnxconverter_common.auto_mixed_precision import auto_convert_mixed_precision
+# from onnxconverter_common import float16
+# from onnxconverter_common.auto_mixed_precision import auto_convert_mixed_precision
 
 
 class SAM2ImageEncoder(nn.Module):
@@ -205,6 +205,8 @@ if __name__ == "__main__":
         model_cfg = "sam2_hiera_s.yaml"
     elif model_type == "sam2_hiera_base_plus":
         model_cfg = "sam2_hiera_b+.yaml"
+    elif model_type == "sam2.1_hiera_large":
+        model_cfg = "sam2.1_hiera_l.yaml"
     else:
         model_cfg = "sam2_hiera_l.yaml"
 
@@ -219,6 +221,7 @@ if __name__ == "__main__":
         sam2_encoder,
         img,
         args.output_encoder,
+        dynamo=False,
         export_params=True,
         opset_version=args.opset,
         do_constant_folding=True,
@@ -288,6 +291,7 @@ if __name__ == "__main__":
             # has_mask_input,
         ),
         args.output_decoder,
+        dynamo=False,
         export_params=True,
         opset_version=args.opset,
         do_constant_folding=True,

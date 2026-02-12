@@ -15,6 +15,7 @@ use crate::utils::score;
 
 static MODEL2FILENAME: Map<&'static str, &'static str> = phf_map! {
     "sam2_small" => "sam2_hiera_small",
+    "sam2_large" => "sam2_hiera_large",
     "dinov2_base" => "dinov2_vitb_reg",
     "depv2_base" => "depth_anything_v2_vitb",
 };

@@ -83,6 +83,11 @@ impl ParamsPanel {
                             Some("sam2_small".to_string()),
                             "SAM2_HIERA_SMALL",
                         );
+                        ui.selectable_value(
+                            &mut global.params.segment_model_name,
+                            Some("sam2_large".to_string()),
+                            "SAM2_HIERA_LARGE",
+                        );
                     });
                 if ui
                     .add_sized([50.0, ui.available_height()], egui::Button::new(" Load "))

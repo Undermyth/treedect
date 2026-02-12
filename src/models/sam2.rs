@@ -271,27 +271,27 @@ impl SAM2Model {
             let scores = &output["iou_predictions"]
                 .try_extract_array::<f32>()?
                 .into_dimensionality::<Ix2>()?;
-            // let (_, max_index) = scores.argmax()?;
+            let (_, max_index) = scores.argmax()?;
             let mut max_index = if scores[(0, 0)] > scores[(0, 1)] {
                 0
             } else {
                 1
             };
-            let decoded_mask = mask.mapv(|x| (x > 0.0) as usize);
-            let valid_area = decoded_mask.sum();
-            if max_index == 1 {
-                if (valid_area as f32) > 0.8 * self.model_rel as f32 * self.model_rel as f32 {
-                    max_index = 0;
-                }
-                // if (valid_area as f32) < 0.1 * self.model_rel as f32 * self.model_rel as f32 {
-                //     max_index = 2;
-                // }
-            }
-            if max_index == 0
-                && (valid_area as f32) < 0.1 * self.model_rel as f32 * self.model_rel as f32
-            {
-                max_index = 1;
-            }
+            // let decoded_mask = mask.mapv(|x| (x > 0.0) as usize);
+            // let valid_area = decoded_mask.sum();
+            // if max_index == 1 {
+            //     if (valid_area as f32) > 0.8 * self.model_rel as f32 * self.model_rel as f32 {
+            //         max_index = 0;
+            //     }
+            //     // if (valid_area as f32) < 0.1 * self.model_rel as f32 * self.model_rel as f32 {
+            //     //     max_index = 2;
+            //     // }
+            // }
+            // if max_index == 0
+            //     && (valid_area as f32) < 0.1 * self.model_rel as f32 * self.model_rel as f32
+            // {
+            //     max_index = 1;
+            // }
 
             let mask: ArrayView2<f32> = mask.slice(s![0, max_index, .., ..]);
 
