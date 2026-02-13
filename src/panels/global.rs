@@ -33,28 +33,36 @@ pub struct Params {
     pub segment_rel: i32,
     /// directory path where ONNX models are stored.
     pub model_dir: String,
-    /// model used for depth estimation. Selected from Depth Anything V2 family.
-    pub depth_model_name: Option<String>,
+    // /// model used for depth estimation. Selected from Depth Anything V2 family.
+    // pub depth_model_name: Option<String>,
     /// model used for segmentation. Selected from SAM2 family.
     pub segment_model_name: Option<String>,
     /// model used for classification. Selected from DINOv2 family.
     pub classify_model_name: Option<String>,
-    /// whether to use height mapping for sampling points estimation.
-    pub use_height_sampling: bool,
-    /// if using grid sampling, the interval between adjacent sampling points. (in pixels)
-    pub grid_sampling_interval: usize,
+    // /// whether to use height mapping for sampling points estimation.
+    // pub use_height_sampling: bool,
+    // /// if using grid sampling, the interval between adjacent sampling points. (in pixels)
+    // pub grid_sampling_interval: usize,
     /// batch size for both segmentation and classification. (should be <= 4 as limited by ONNX bugs)
     pub batch_size: usize,
-    /// radius for local maximum dilation. larger value will result in sparser sampling points.
-    pub dilation_radius: usize,
-    /// radius for NMS. larger value will result in sparser sampling points.
-    pub nms_radius: usize,
+    // /// radius for local maximum dilation. larger value will result in sparser sampling points.
+    // pub dilation_radius: usize,
+    // /// radius for NMS. larger value will result in sparser sampling points.
+    // pub nms_radius: usize,
     /// split the image into n_grid * n_grid to calculate the importance score.
     pub n_grid: usize,
     /// number of classes for clustering.
     pub n_classes: usize,
     /// whether to display the cluster ids.
     pub show_cluster_ids: bool,
+    /// luminance threshold for black pixels.
+    pub luminance_filt: u8,
+    /// scanning interval in X direction.
+    pub x_scan_interval: usize,
+    /// scanning interval in Y direction.
+    pub y_scan_interval: usize,
+    /// overlap ratio for merging segments.
+    pub merge_thr: f32,
 }
 
 impl Params {
@@ -62,17 +70,21 @@ impl Params {
         Self {
             segment_rel: 1024,
             model_dir: "./output_models".to_string(),
-            depth_model_name: None,
+            // depth_model_name: None,
             segment_model_name: None,
             classify_model_name: None,
-            use_height_sampling: false,
-            grid_sampling_interval: 320,
+            // use_height_sampling: false,
+            // grid_sampling_interval: 320,
             batch_size: 4,
-            dilation_radius: 70,
-            nms_radius: 150,
+            // dilation_radius: 70,
+            // nms_radius: 150,
             n_grid: 4,
             n_classes: 5,
             show_cluster_ids: true,
+            luminance_filt: 80,
+            x_scan_interval: 50,
+            y_scan_interval: 60,
+            merge_thr: 0.8,
         }
     }
 }

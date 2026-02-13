@@ -54,24 +54,24 @@ impl ParamsPanel {
                 }
                 ui.end_row();
 
-                ui.label("Depth Model");
-                egui::ComboBox::from_id_salt("depth_model")
-                    .width(100.0)
-                    .selected_text(global.params.depth_model_name.as_deref().unwrap_or(""))
-                    .show_ui(ui, |ui| {
-                        ui.selectable_value(
-                            &mut global.params.depth_model_name,
-                            Some("depv2_base".to_string()),
-                            "DEPTH_V2_BASE",
-                        );
-                    });
-                if ui
-                    .add_sized([50.0, ui.available_height()], egui::Button::new(" Load "))
-                    .clicked()
-                {
-                    actions::load_depth_model_action(global);
-                }
-                ui.end_row();
+                // ui.label("Depth Model");
+                // egui::ComboBox::from_id_salt("depth_model")
+                //     .width(100.0)
+                //     .selected_text(global.params.depth_model_name.as_deref().unwrap_or(""))
+                //     .show_ui(ui, |ui| {
+                //         ui.selectable_value(
+                //             &mut global.params.depth_model_name,
+                //             Some("depv2_base".to_string()),
+                //             "DEPTH_V2_BASE",
+                //         );
+                //     });
+                // if ui
+                //     .add_sized([50.0, ui.available_height()], egui::Button::new(" Load "))
+                //     .clicked()
+                // {
+                //     actions::load_depth_model_action(global);
+                // }
+                // ui.end_row();
 
                 ui.label("Segment Model");
                 egui::ComboBox::from_id_salt("segment_model")
@@ -145,86 +145,86 @@ impl ParamsPanel {
                     }
                 }
 
-                ui.checkbox(&mut global.params.use_height_sampling, "Enable");
-                if ui
-                    .add_sized([50.0, ui.available_height()], egui::Button::new("Run"))
-                    .clicked()
-                {
-                    if global.layers.len() == 0 {
-                        global.progress_state = global::ProgressState::Error(
-                            "No image loaded. Please load an image first.".to_string(),
-                        );
-                        return;
-                    }
-                    // pop out the previous generated sampling points layer
-                    // TODO: this is a hacky way to remove the sampling points layer. Should have a unique ID.
-                    if global.layers.len() == 2 {
-                        global.layers.pop();
-                    }
-                    if global.layers.len() > 2 {
-                        global.progress_state = global::ProgressState::Error(
-                            "Sampling should be done before segmentation & classification. \
-                             Please reload the image to start a new sampling."
-                                .to_string(),
-                        );
-                        return;
-                    }
-                    if !global.params.use_height_sampling {
-                        let [width, height] = global.layers[0].get_image_size();
-                        let start_time = std::time::Instant::now();
-                        let mut sampling_points = actions::grid_sampling_action(
-                            global.params.grid_sampling_interval,
-                            width,
-                            height,
-                        );
-                        let grid_time = start_time.elapsed();
-                        log::info!("Grid sampling took: {:?}", grid_time);
+                // ui.checkbox(&mut global.params.use_height_sampling, "Enable");
+                // if ui
+                //     .add_sized([50.0, ui.available_height()], egui::Button::new("Run"))
+                //     .clicked()
+                // {
+                //     if global.layers.len() == 0 {
+                //         global.progress_state = global::ProgressState::Error(
+                //             "No image loaded. Please load an image first.".to_string(),
+                //         );
+                //         return;
+                //     }
+                //     // pop out the previous generated sampling points layer
+                //     // TODO: this is a hacky way to remove the sampling points layer. Should have a unique ID.
+                //     if global.layers.len() == 2 {
+                //         global.layers.pop();
+                //     }
+                //     if global.layers.len() > 2 {
+                //         global.progress_state = global::ProgressState::Error(
+                //             "Sampling should be done before segmentation & classification. \
+                //              Please reload the image to start a new sampling."
+                //                 .to_string(),
+                //         );
+                //         return;
+                //     }
+                //     if !global.params.use_height_sampling {
+                //         let [width, height] = global.layers[0].get_image_size();
+                //         let start_time = std::time::Instant::now();
+                //         let mut sampling_points = actions::grid_sampling_action(
+                //             global.params.grid_sampling_interval,
+                //             width,
+                //             height,
+                //         );
+                //         let grid_time = start_time.elapsed();
+                //         log::info!("Grid sampling took: {:?}", grid_time);
 
-                        let start_time = std::time::Instant::now();
-                        let sampling_points = actions::filter_sampling_action(
-                            &mut sampling_points,
-                            global.raw_image.as_ref().unwrap().lock().unwrap(),
-                        );
-                        let filter_time = start_time.elapsed();
-                        log::info!("Filter sampling took: {:?}", filter_time);
-                        log::info!("Number of sampling points: {}", sampling_points.len());
-                        global.layers.push(Layer::from_sampling_points(
-                            &sampling_points,
-                            width,
-                            height,
-                            global.params.segment_rel as usize,
-                        ));
-                        global.sampling_points = Some(sampling_points);
-                    } else {
-                        if global.raw_image.is_none() {
-                            global.progress_state =
-                                global::ProgressState::Error("No image loaded".to_string());
-                            return;
-                        }
-                        if global.depth_model.is_none() {
-                            global.progress_state = global::ProgressState::Error(
-                                "Height-aware sampling is enabled but no depth model loaded"
-                                    .to_string(),
-                            );
-                            return;
-                        }
-                        let (progress_sender, progress_receiver) = channel();
-                        let (depth_sender, depth_receiver) = channel();
-                        self.depth_progress_receiver = Some(progress_receiver);
-                        self.depth_receiver = Some(depth_receiver);
-                        actions::haware_sampling_action(global, progress_sender, depth_sender);
-                    }
-                }
-                ui.end_row();
+                //         let start_time = std::time::Instant::now();
+                //         let sampling_points = actions::filter_sampling_action(
+                //             &mut sampling_points,
+                //             global.raw_image.as_ref().unwrap().lock().unwrap(),
+                //         );
+                //         let filter_time = start_time.elapsed();
+                //         log::info!("Filter sampling took: {:?}", filter_time);
+                //         log::info!("Number of sampling points: {}", sampling_points.len());
+                //         global.layers.push(Layer::from_sampling_points(
+                //             &sampling_points,
+                //             width,
+                //             height,
+                //             global.params.segment_rel as usize,
+                //         ));
+                //         global.sampling_points = Some(sampling_points);
+                //     } else {
+                //         if global.raw_image.is_none() {
+                //             global.progress_state =
+                //                 global::ProgressState::Error("No image loaded".to_string());
+                //             return;
+                //         }
+                //         if global.depth_model.is_none() {
+                //             global.progress_state = global::ProgressState::Error(
+                //                 "Height-aware sampling is enabled but no depth model loaded"
+                //                     .to_string(),
+                //             );
+                //             return;
+                //         }
+                //         let (progress_sender, progress_receiver) = channel();
+                //         let (depth_sender, depth_receiver) = channel();
+                //         self.depth_progress_receiver = Some(progress_receiver);
+                //         self.depth_receiver = Some(depth_receiver);
+                //         actions::haware_sampling_action(global, progress_sender, depth_sender);
+                //     }
+                // }
+                // ui.end_row();
 
-                ui.label("Sampling Interval");
-                ui.add_sized(
-                    ui.available_size_before_wrap(),
-                    egui::DragValue::new(&mut global.params.grid_sampling_interval)
-                        .speed(5)
-                        .suffix(" px"),
-                );
-                ui.end_row();
+                // ui.label("Sampling Interval");
+                // ui.add_sized(
+                //     ui.available_size_before_wrap(),
+                //     egui::DragValue::new(&mut global.params.grid_sampling_interval)
+                //         .speed(5)
+                //         .suffix(" px"),
+                // );
+                // ui.end_row();
 
                 ui.label("Batch Size");
                 ui.add_sized(
@@ -233,21 +233,53 @@ impl ParamsPanel {
                 );
                 ui.end_row();
 
-                ui.label("Dilation Radius");
+                // ui.label("Dilation Radius");
+                // ui.add_sized(
+                //     ui.available_size_before_wrap(),
+                //     egui::DragValue::new(&mut global.params.dilation_radius)
+                //         .speed(1)
+                //         .suffix(" px"),
+                // );
+                // ui.end_row();
+
+                // ui.label("NMS Radius");
+                // ui.add_sized(
+                //     ui.available_size_before_wrap(),
+                //     egui::DragValue::new(&mut global.params.nms_radius)
+                //         .speed(1)
+                //         .suffix(" px"),
+                // );
+                // ui.end_row();
+
+                ui.label("Luminance Threshold");
                 ui.add_sized(
                     ui.available_size_before_wrap(),
-                    egui::DragValue::new(&mut global.params.dilation_radius)
+                    egui::DragValue::new(&mut global.params.luminance_filt).speed(1),
+                );
+                ui.end_row();
+
+                ui.label("X Scan Interval");
+                ui.add_sized(
+                    ui.available_size_before_wrap(),
+                    egui::DragValue::new(&mut global.params.x_scan_interval)
                         .speed(1)
                         .suffix(" px"),
                 );
                 ui.end_row();
 
-                ui.label("NMS Radius");
+                ui.label("Y Scan Interval");
                 ui.add_sized(
                     ui.available_size_before_wrap(),
-                    egui::DragValue::new(&mut global.params.nms_radius)
+                    egui::DragValue::new(&mut global.params.y_scan_interval)
                         .speed(1)
                         .suffix(" px"),
+                );
+                ui.end_row();
+
+                ui.label("Merge Threshold");
+                ui.add_sized(
+                    ui.available_size_before_wrap(),
+                    egui::DragValue::new(&mut global.params.merge_thr).speed(0.01),
                 );
                 ui.end_row();
 

@@ -1,5 +1,6 @@
 use eframe::egui;
 use indicatif::ProgressBar;
+use ndarray::s;
 use phf::{Map, phf_map};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -80,46 +81,46 @@ pub fn select_model_path_action(sender: Sender<String>) {
     });
 }
 
-pub fn load_depth_model_action(global: &mut global::GlobalState) {
-    let model_name = match global.params.depth_model_name.as_deref() {
-        Some(name) => name,
-        None => {
-            global.progress_state =
-                global::ProgressState::Error("No depth model selected".to_string());
-            return;
-        }
-    };
-    let model_prefix = match MODEL2FILENAME.get(model_name) {
-        Some(prefix) => prefix,
-        None => {
-            global.progress_state =
-                global::ProgressState::Error(format!("Unknown depth model: {model_name}"));
-            return;
-        }
-    };
-    let model_path = std::path::Path::new(&global.params.model_dir)
-        .join(format!("{}.onnx", model_prefix))
-        .to_string_lossy()
-        .to_string();
-    if !std::path::Path::new(&model_path).exists() {
-        global.progress_state =
-            global::ProgressState::Error(format!("Depth model not found: {}", model_path));
-        return;
-    }
-    let result = dam2::DAM2Model::from_path(518, &model_path);
-    match result {
-        Ok(model) => {
-            global.depth_model = Some(Arc::new(Mutex::new(model)));
-            global.progress_state =
-                global::ProgressState::Finished(format!("Depth model {model_name} loaded"));
-        }
-        Err(e) => {
-            log::error!("Error when loading ONNX depth model: {e}");
-            global.progress_state =
-                global::ProgressState::Error(format!("Error when loading ONNX depth model: {e}"));
-        }
-    }
-}
+// pub fn load_depth_model_action(global: &mut global::GlobalState) {
+//     let model_name = match global.params.depth_model_name.as_deref() {
+//         Some(name) => name,
+//         None => {
+//             global.progress_state =
+//                 global::ProgressState::Error("No depth model selected".to_string());
+//             return;
+//         }
+//     };
+//     let model_prefix = match MODEL2FILENAME.get(model_name) {
+//         Some(prefix) => prefix,
+//         None => {
+//             global.progress_state =
+//                 global::ProgressState::Error(format!("Unknown depth model: {model_name}"));
+//             return;
+//         }
+//     };
+//     let model_path = std::path::Path::new(&global.params.model_dir)
+//         .join(format!("{}.onnx", model_prefix))
+//         .to_string_lossy()
+//         .to_string();
+//     if !std::path::Path::new(&model_path).exists() {
+//         global.progress_state =
+//             global::ProgressState::Error(format!("Depth model not found: {}", model_path));
+//         return;
+//     }
+//     let result = dam2::DAM2Model::from_path(518, &model_path);
+//     match result {
+//         Ok(model) => {
+//             global.depth_model = Some(Arc::new(Mutex::new(model)));
+//             global.progress_state =
+//                 global::ProgressState::Finished(format!("Depth model {model_name} loaded"));
+//         }
+//         Err(e) => {
+//             log::error!("Error when loading ONNX depth model: {e}");
+//             global.progress_state =
+//                 global::ProgressState::Error(format!("Error when loading ONNX depth model: {e}"));
+//         }
+//     }
+// }
 
 pub fn load_segment_model_action(global: &mut global::GlobalState) {
     let model_name = match global.params.segment_model_name.as_deref() {
@@ -316,101 +317,72 @@ pub fn filter_sampling_action(
         .collect()
 }
 
-pub fn haware_sampling_action(
-    global: &mut global::GlobalState,
-    progress_sender: Sender<f32>,
-    depth_sender: Sender<Vec<[usize; 2]>>,
-) {
-    let raw_image = global.raw_image.as_ref().unwrap().clone();
-    let batcher = dam2::DAM2Batcher::new(global.params.segment_rel as usize, raw_image);
-    let dilation_radius = global.params.dilation_radius;
-    let nms_radius = global.params.nms_radius;
-    let model = global.depth_model.as_mut().unwrap().clone();
-    std::thread::spawn(move || {
-        let total_length = batcher.len();
-        let mut sampling_points = Vec::<[usize; 2]>::new();
-        let bar = ProgressBar::new(total_length as u64);
-        bar.set_style(
-            indicatif::ProgressStyle::with_template(
-                "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len}",
-            )
-            .unwrap(),
-        );
-        bar.set_prefix("Depth Estimation");
-        for batch in batcher.into_iter() {
-            let result = model.lock().unwrap().forward(batch);
-            match result {
-                Ok(result) => {
-                    let samples = dam2::decode_depth_to_sample(&result, dilation_radius);
-                    sampling_points.extend(samples);
-                }
-                Err(e) => {
-                    log::error!("Error: {e}");
-                }
-            }
-            bar.inc(1);
-            progress_sender
-                .send(bar.position() as f32 / total_length as f32)
-                .unwrap();
-        }
-        let sampling_points = dam2::filter_near_samples(sampling_points, nms_radius);
-        depth_sender.send(sampling_points).unwrap();
-    });
-    // sampling_points
-}
+// pub fn haware_sampling_action(
+//     global: &mut global::GlobalState,
+//     progress_sender: Sender<f32>,
+//     depth_sender: Sender<Vec<[usize; 2]>>,
+// ) {
+//     let raw_image = global.raw_image.as_ref().unwrap().clone();
+//     let batcher = dam2::DAM2Batcher::new(global.params.segment_rel as usize, raw_image);
+//     let dilation_radius = global.params.dilation_radius;
+//     let nms_radius = global.params.nms_radius;
+//     let model = global.depth_model.as_mut().unwrap().clone();
+//     std::thread::spawn(move || {
+//         let total_length = batcher.len();
+//         let mut sampling_points = Vec::<[usize; 2]>::new();
+//         let bar = ProgressBar::new(total_length as u64);
+//         bar.set_style(
+//             indicatif::ProgressStyle::with_template(
+//                 "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len}",
+//             )
+//             .unwrap(),
+//         );
+//         bar.set_prefix("Depth Estimation");
+//         for batch in batcher.into_iter() {
+//             let result = model.lock().unwrap().forward(batch);
+//             match result {
+//                 Ok(result) => {
+//                     let samples = dam2::decode_depth_to_sample(&result, dilation_radius);
+//                     sampling_points.extend(samples);
+//                 }
+//                 Err(e) => {
+//                     log::error!("Error: {e}");
+//                 }
+//             }
+//             bar.inc(1);
+//             progress_sender
+//                 .send(bar.position() as f32 / total_length as f32)
+//                 .unwrap();
+//         }
+//         let sampling_points = dam2::filter_near_samples(sampling_points, nms_radius);
+//         depth_sender.send(sampling_points).unwrap();
+//     });
+//     // sampling_points
+// }
 
 pub fn segment_action(
     global: &mut global::GlobalState,
     progress_sender: Sender<f32>,
     segment_sender: Sender<palette::Palette>,
 ) {
-    let sampling_points = global.sampling_points.as_ref().unwrap().clone();
     let raw_image = global.raw_image.as_ref().unwrap();
-    let width = raw_image.lock().unwrap().width() as usize;
-    let mut palette = palette::Palette::new(width, global.params.n_grid);
-    palette.debug = global.detail_logging;
     let raw_image = raw_image.clone();
-    let batcher = sam2::SAM2Batcher::new(
-        global.params.batch_size,
-        global.params.segment_rel as usize,
-        sampling_points.clone(),
-        raw_image,
-    );
+    let patch_size = global.params.segment_rel;
+    let lumin_filt = global.params.luminance_filt;
+    let x_scan_interval = global.params.x_scan_interval;
+    let y_scan_interval = global.params.y_scan_interval;
+    let merge_thr = global.params.merge_thr;
+
     let model = global.segment_model.as_mut().unwrap().clone();
-    // let mask_threshold = global.params.mask_threshold;
-    let mask_threshold = 0.0;
     std::thread::spawn(move || {
-        let palette = Arc::new(Mutex::new(palette)); // no competition here. only for interface compatibility
-        let bar = ProgressBar::new(sampling_points.len() as u64);
-        bar.set_style(
-            indicatif::ProgressStyle::with_template(
-                "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len}",
-            )
-            .unwrap(),
+        let palette = model.lock().unwrap().tiled_diffuse_merge_scan(
+            raw_image,
+            patch_size as usize,
+            lumin_filt,
+            x_scan_interval,
+            y_scan_interval,
+            merge_thr,
         );
-        bar.set_prefix("Segmenting");
-        for batch in batcher.into_iter() {
-            // let start_time = std::time::Instant::now();
-            let actual_batch_size = batch.image.shape()[0];
-            let result = model.lock().unwrap().forward(batch);
-            match result {
-                Ok(result) => {
-                    sam2::decode_mask_to_palette(&result, &palette, mask_threshold);
-                }
-                Err(e) => {
-                    log::error!("Error: {e}");
-                }
-            }
-            bar.inc(actual_batch_size as u64);
-            let percent = bar.position() as f32 / sampling_points.len() as f32;
-            progress_sender.send(percent).unwrap();
-            // let end_time = std::time::Instant::now();
-            // log::info!("Inference time taken: {:?}", end_time - start_time);
-        }
-        bar.finish();
-        // unwrap the palette from mutex
-        let mutex = Arc::try_unwrap(palette).unwrap();
-        let palette = mutex.into_inner().unwrap();
         segment_sender.send(palette).unwrap();
     });
 }
@@ -444,7 +416,15 @@ pub fn point_segment_action(global: &mut global::GlobalState) {
         let result = model.lock().unwrap().forward(batch);
         match result {
             Ok(result) => {
-                sam2::decode_mask_to_palette(&result, &palette, mask_threshold);
+                let mask = result
+                    .mask_logits
+                    .slice(s![0, .., ..])
+                    .mapv(|x| (x > 0.0) as usize);
+                palette.lock().unwrap().add_segment(
+                    mask,
+                    [result.coordinates[(0, 0)], result.coordinates[(0, 1)]],
+                    result.patch_size,
+                );
             }
             Err(e) => {
                 log::error!("Error: {e}");
@@ -505,7 +485,7 @@ pub fn classify_action(
             progress_sender.send(percent).unwrap();
         }
         bar.finish();
-        palette.lock().unwrap().get_statistics();
+        // palette.lock().unwrap().get_statistics();
         let features = parse_features(features.unwrap(), palette.clone());
         assert!(!features.features.is_any_nan(), "NaN detected in features");
         let output = cluster::cluster(features, n_classes);

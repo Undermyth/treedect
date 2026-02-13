@@ -119,7 +119,10 @@ impl ActionPanel {
                         "Segmentation".to_string(),
                         &palette,
                     ));
+                    palette.debug = global.detail_logging;
                     palette.clear_empty_segments();
+                    palette.n_grids = Some(global.params.n_grid);
+                    palette.get_statistics();
                     global.palette = Some(Arc::new(Mutex::new(palette)));
                     global.progress_state =
                         global::ProgressState::Finished("Segmentation finished".to_string());
@@ -146,11 +149,11 @@ impl ActionPanel {
                         global::ProgressState::Error("No segmentation model loaded".to_string());
                     return;
                 }
-                if global.sampling_points.is_none() {
-                    global.progress_state =
-                        global::ProgressState::Error("No sampling points generated".to_string());
-                    return;
-                }
+                // if global.sampling_points.is_none() {
+                //     global.progress_state =
+                //         global::ProgressState::Error("No sampling points generated".to_string());
+                //     return;
+                // }
                 let (progress_sender, progress_receiver) = channel();
                 let (segment_sender, segment_receiver) = channel();
                 self.segment_progress_receiver = Some(progress_receiver);

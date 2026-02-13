@@ -4,7 +4,7 @@ import onnx
 # 遍历output_models目录下以sam3开头的所有onnx文件
 output_models_dir = "output_models"
 for filename in os.listdir(output_models_dir):
-    if filename.startswith("sam2.1") and filename.endswith(".onnx"):
+    if filename.startswith("sam2") and filename.endswith(".onnx"):
         onnx_path = os.path.join(output_models_dir, filename)
         print(f"\n{'='*60}")
         print(f"ONNX文件: {filename}")
