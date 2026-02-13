@@ -6,7 +6,7 @@ use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::models::cluster;
-use crate::models::dam2;
+// use crate::models::dam2;
 use crate::models::dinov2;
 use crate::models::sam2;
 use crate::panels::canvas;
@@ -400,8 +400,6 @@ pub fn point_segment_action(global: &mut global::GlobalState) {
         raw_image,
     );
     let model = global.segment_model.as_mut().unwrap().clone();
-    // let mask_threshold = global.params.mask_threshold;
-    let mask_threshold = 0.0;
     let bar = ProgressBar::new(sampling_points.len() as u64);
     bar.set_style(
         indicatif::ProgressStyle::with_template(
@@ -425,6 +423,11 @@ pub fn point_segment_action(global: &mut global::GlobalState) {
                     [result.coordinates[(0, 0)], result.coordinates[(0, 1)]],
                     result.patch_size,
                 );
+                palette.lock().unwrap().clear_empty_segments();
+                palette.lock().unwrap().clear_small_segments(
+                    (global.params.segment_rel * global.params.segment_rel / 200) as usize,
+                );
+                palette.lock().unwrap().get_statistics();
             }
             Err(e) => {
                 log::error!("Error: {e}");

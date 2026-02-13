@@ -177,6 +177,25 @@ impl Palette {
             }
         }
     }
+
+    pub fn clear_small_segments(&mut self, thr: usize) {
+        // Collect indices of segments to remove first to avoid borrow conflicts
+
+        let to_remove: Vec<usize> = self
+            .areas
+            .iter()
+            .enumerate()
+            .filter(|(i, area)| self.valid[*i] && **area < thr)
+            .map(|(i, _)| i + 1)
+            .collect();
+
+        // Now remove the segments
+
+        for segment_id in to_remove {
+            self.remove_segment(segment_id);
+        }
+    }
+
     pub fn get_id_at_position(&self, pos: [usize; 2]) -> Option<usize> {
         let index = self.map[(pos[1], pos[0])];
         if index != 0 {
@@ -192,6 +211,11 @@ impl Palette {
             self.map = new_map;
             self.valid[segment_id - 1] = false;
         }
+    }
+    pub fn remove_segment(&mut self, segment_id: usize) {
+        let new_map = self.map.mapv(|x| if x == segment_id { 0 } else { x });
+        self.map = new_map;
+        self.valid[segment_id - 1] = false;
     }
 
     /// Detect whether a given segment is overlaped with existing segments, and how.

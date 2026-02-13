@@ -116,34 +116,34 @@ impl ParamsPanel {
                 }
                 ui.end_row();
 
-                ui.label("H-Aware Sampling");
-                // check receiver
-                if let Some(receiver) = &self.depth_progress_receiver {
-                    if let Ok(progress) = receiver.try_recv() {
-                        global.progress_state = global::ProgressState::Processing(
-                            "Running Depth Estimation".to_string(),
-                            progress,
-                        );
-                    }
-                }
-                if let Some(receiver) = &self.depth_receiver {
-                    if let Ok(mut sampling_points) = receiver.try_recv() {
-                        let [width, height] = global.layers[0].get_image_size();
-                        let sampling_points = actions::filter_sampling_action(
-                            &mut sampling_points,
-                            global.raw_image.as_ref().unwrap().lock().unwrap(),
-                        );
-                        global.layers.push(Layer::from_sampling_points(
-                            &sampling_points,
-                            width,
-                            height,
-                            global.params.segment_rel as usize,
-                        ));
-                        global.sampling_points = Some(sampling_points);
-                        self.depth_progress_receiver = None;
-                        self.depth_receiver = None;
-                    }
-                }
+                // ui.label("H-Aware Sampling");
+                // // check receiver
+                // if let Some(receiver) = &self.depth_progress_receiver {
+                //     if let Ok(progress) = receiver.try_recv() {
+                //         global.progress_state = global::ProgressState::Processing(
+                //             "Running Depth Estimation".to_string(),
+                //             progress,
+                //         );
+                //     }
+                // }
+                // if let Some(receiver) = &self.depth_receiver {
+                //     if let Ok(mut sampling_points) = receiver.try_recv() {
+                //         let [width, height] = global.layers[0].get_image_size();
+                //         let sampling_points = actions::filter_sampling_action(
+                //             &mut sampling_points,
+                //             global.raw_image.as_ref().unwrap().lock().unwrap(),
+                //         );
+                //         global.layers.push(Layer::from_sampling_points(
+                //             &sampling_points,
+                //             width,
+                //             height,
+                //             global.params.segment_rel as usize,
+                //         ));
+                //         global.sampling_points = Some(sampling_points);
+                //         self.depth_progress_receiver = None;
+                //         self.depth_receiver = None;
+                //     }
+                // }
 
                 // ui.checkbox(&mut global.params.use_height_sampling, "Enable");
                 // if ui

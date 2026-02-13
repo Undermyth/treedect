@@ -121,6 +121,9 @@ impl ActionPanel {
                     ));
                     palette.debug = global.detail_logging;
                     palette.clear_empty_segments();
+                    palette.clear_small_segments(
+                        (global.params.segment_rel * global.params.segment_rel / 200) as usize,
+                    );
                     palette.n_grids = Some(global.params.n_grid);
                     palette.get_statistics();
                     global.palette = Some(Arc::new(Mutex::new(palette)));
