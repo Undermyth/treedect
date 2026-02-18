@@ -285,6 +285,75 @@ impl Layer {
         }
     }
 
+    pub fn gpu_draw_noinvasive_circle(
+        &mut self,
+        center: &[usize; 2],
+        radius: usize,
+        color: egui::Color32,
+        increment: bool,
+    ) -> Result<(), &'static str> {
+        let texture = self
+            .texture
+            .as_mut()
+            .ok_or("Texture not uploaded to GPU yet")?;
+
+        let center_x = center[0];
+        let center_y = center[1];
+
+        let (img_width, img_height) = if let Some(LayerImage::EguiImage(img)) = &self.raw_image {
+            (img.width(), img.height())
+        } else {
+            return Err("raw_image is not EguiImage type");
+        };
+
+        let min_x = center_x.saturating_sub(radius);
+        let min_y = center_y.saturating_sub(radius);
+        let max_x = (center_x + radius + 1).min(img_width);
+        let max_y = (center_y + radius + 1).min(img_height);
+
+        let bbox_width = max_x - min_x;
+        let bbox_height = max_y - min_y;
+
+        let mut temp_image =
+            egui::ColorImage::filled([bbox_width, bbox_height], egui::Color32::TRANSPARENT);
+
+        if let Some(LayerImage::EguiImage(image)) = self.raw_image.as_mut() {
+            for y in min_y..max_y {
+                for x in min_x..max_x {
+                    let dx = x as i32 - center_x as i32;
+                    let dy = y as i32 - center_y as i32;
+                    let inside_circle = dx * dx + dy * dy <= (radius as i32) * (radius as i32);
+
+                    let pixel = image[(x, y)];
+                    let new_pixel = if inside_circle {
+                        if increment {
+                            if pixel == egui::Color32::TRANSPARENT {
+                                color
+                            } else {
+                                pixel
+                            }
+                        } else {
+                            if pixel == color {
+                                egui::Color32::TRANSPARENT
+                            } else {
+                                pixel
+                            }
+                        }
+                    } else {
+                        pixel
+                    };
+
+                    image[(x, y)] = new_pixel;
+                    temp_image[(x - min_x, y - min_y)] = new_pixel;
+                }
+            }
+        }
+
+        texture.set_partial([min_x, min_y], temp_image, egui::TextureOptions::default());
+
+        Ok(())
+    }
+
     fn cpu_draw_center_square(image: &mut egui::ColorImage, length: usize, width: usize) {
         let img_width = image.width();
         let img_height = image.height();

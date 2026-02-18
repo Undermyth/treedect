@@ -225,6 +225,23 @@ impl ActionPanel {
         });
 
         ui.vertical_centered_justified(|ui| {
+            if ui
+                .add(components::wide_button("Finish Edit", ui.available_width()))
+                .clicked()
+            {
+                global.edit_mode = false;
+                global.edit_segment_id = None;
+                global
+                    .palette
+                    .as_ref()
+                    .unwrap()
+                    .lock()
+                    .unwrap()
+                    .clear_empty_segments();
+            }
+        });
+
+        ui.vertical_centered_justified(|ui| {
             if let Some(receiver) = &self.image_save_receiver {
                 if let Ok(path) = receiver.try_recv() {
                     actions::export_image_action(global, path);

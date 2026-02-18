@@ -69,6 +69,8 @@ pub struct Params {
     pub y_scan_interval: usize,
     /// overlap ratio for merging segments.
     pub merge_thr: f32,
+    /// radius for pencil in editing mode.
+    pub pen_radius: usize,
 }
 
 impl Params {
@@ -91,6 +93,7 @@ impl Params {
             x_scan_interval: 50,
             y_scan_interval: 60,
             merge_thr: 0.8,
+            pen_radius: 10,
         }
     }
 }
@@ -111,6 +114,9 @@ pub struct GlobalState {
     pub select_pos: [usize; 2],
     pub score_table: Option<Table>,
     pub sorted: bool,
+    pub edit_mode: bool,
+    pub increment: bool,
+    pub edit_segment_id: Option<usize>,
 }
 
 impl GlobalState {
@@ -131,6 +137,9 @@ impl GlobalState {
             select_pos: [0, 0],
             score_table: None,
             sorted: false,
+            edit_mode: false,
+            increment: false,
+            edit_segment_id: None,
         }
     }
     pub fn get_layer(&mut self, layer_type: LayerType) -> &mut canvas::Layer {

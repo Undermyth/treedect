@@ -155,6 +155,13 @@ impl ParamsPanel {
                 );
                 ui.end_row();
 
+                ui.label("Pencil Radius");
+                ui.add_sized(
+                    ui.available_size_before_wrap(),
+                    egui::DragValue::new(&mut global.params.pen_radius).speed(1),
+                );
+                ui.end_row();
+
                 ui.label("Grid");
                 ui.add_sized(
                     ui.available_size_before_wrap(),

@@ -356,4 +356,41 @@ impl Palette {
             }
         }
     }
+
+    pub fn edit_segment(
+        &mut self,
+        segment_id: usize,
+        position: [usize; 2],
+        increment: bool,
+        radius: usize,
+    ) {
+        let [cx, cy] = position;
+        let radius_sq = radius * radius;
+
+        let x_start = cx.saturating_sub(radius);
+        let x_end = (cx + radius).min(self.size - 1);
+        let y_start = cy.saturating_sub(radius);
+        let y_end = (cy + radius).min(self.size - 1);
+
+        for y in y_start..=y_end {
+            for x in x_start..=x_end {
+                let dx = x as isize - cx as isize;
+                let dy = y as isize - cy as isize;
+                if (dx * dx + dy * dy) as usize <= radius_sq {
+                    let current_id = self.map[(y, x)];
+                    if increment {
+                        if current_id == 0 {
+                            self.map[(y, x)] = segment_id;
+                            self.areas[segment_id - 1] += 1;
+                        }
+                    } else {
+                        if current_id == segment_id {
+                            self.map[(y, x)] = 0;
+                            self.areas[segment_id - 1] -= 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

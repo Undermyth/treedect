@@ -119,6 +119,29 @@ impl Canvas {
             })
             .inner;
 
+        // 绘制 pen_radius 圆环 - 使用独立的 Area 确保在最上层显示
+        egui::Area::new(egui::Id::new("pen_radius_ring"))
+            .fixed_pos(response.rect.min)
+            .interactable(false)
+            .show(ctx, |ui| {
+                let hover_pos = ui.input(|i| i.pointer.hover_pos());
+                if let Some(pos) = hover_pos {
+                    if response.rect.contains(pos) {
+                        let radius = global.params.pen_radius as f32 * global.canvas_state.scale;
+                        // let ring_pos = pos - response.rect.min;
+                        ui.painter().circle_stroke(
+                            // ring_pos.to_pos2(),
+                            pos,
+                            radius,
+                            (
+                                1.0,
+                                egui::Color32::from_rgba_unmultiplied(255, 66, 255, 180),
+                            ),
+                        );
+                    }
+                }
+            });
+
         // 优先使用 plot_area_response 处理交互，如果不可用则回退到 painter 的 response
         let interaction_response = if plot_area_response.hovered()
             || plot_area_response.clicked()
@@ -129,8 +152,43 @@ impl Canvas {
             &response
         };
 
-        // 处理拖拽和缩放交互
-        if global.layers.len() > 0 {
+        // 处理拖拽和缩放交互. 如果是编辑模式，则不处理交互
+        if global.edit_mode {
+            if interaction_response.dragged() {
+                let pos = plot_area_response
+                    .interact_pointer_pos()
+                    .unwrap_or_default();
+                let canvas_pos = pos - response.rect.min;
+                let canvas_pos =
+                    (canvas_pos - global.canvas_state.offset) / global.canvas_state.scale;
+                let edit_segment_id = global.edit_segment_id.unwrap();
+                let radius = global.params.pen_radius;
+                global
+                    .palette
+                    .as_ref()
+                    .unwrap()
+                    .lock()
+                    .unwrap()
+                    .edit_segment(
+                        edit_segment_id,
+                        [canvas_pos[0] as usize, canvas_pos[1] as usize],
+                        global.increment,
+                        radius,
+                    );
+                let color =
+                    global.palette.as_ref().unwrap().lock().unwrap().color_map[edit_segment_id];
+                let color = egui::Color32::from_rgb(color.r, color.g, color.b);
+                let increment = global.increment;
+                let _ = global
+                    .get_layer(global::LayerType::Segmentation)
+                    .gpu_draw_noinvasive_circle(
+                        &[canvas_pos[0] as usize, canvas_pos[1] as usize],
+                        radius,
+                        color,
+                        increment,
+                    );
+            }
+        } else if global.layers.len() > 0 {
             let image_size = global.get_layer(global::LayerType::Image).get_image_size();
             canvas::update_drag_and_zoom(
                 ui,
@@ -160,6 +218,48 @@ impl Canvas {
                 global
                     .get_layer(global::LayerType::Segmentation)
                     .rerender(canvas::LayerImage::from_palette(&palette));
+            }
+            if ui.button("Increment").clicked() {
+                let segment_id = global
+                    .palette
+                    .as_ref()
+                    .unwrap()
+                    .lock()
+                    .unwrap()
+                    .get_id_at_position(global.select_pos);
+                match segment_id {
+                    Some(segment_id) => {
+                        global.edit_mode = true;
+                        global.increment = true;
+                        global.edit_segment_id = Some(segment_id);
+                    }
+                    None => {
+                        global.progress_state = global::ProgressState::Error(
+                            "Please select a segment first".to_string(),
+                        );
+                    }
+                }
+            }
+            if ui.button("Decrement").clicked() {
+                let segment_id = global
+                    .palette
+                    .as_ref()
+                    .unwrap()
+                    .lock()
+                    .unwrap()
+                    .get_id_at_position(global.select_pos);
+                match segment_id {
+                    Some(segment_id) => {
+                        global.edit_mode = true;
+                        global.increment = false;
+                        global.edit_segment_id = Some(segment_id);
+                    }
+                    None => {
+                        global.progress_state = global::ProgressState::Error(
+                            "Please select a segment first".to_string(),
+                        );
+                    }
+                }
             }
             if ui.button("Reset View").clicked() {
                 global.canvas_state.offset = egui::Vec2::ZERO;
