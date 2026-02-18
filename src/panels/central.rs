@@ -131,7 +131,7 @@ impl Canvas {
 
         // 处理拖拽和缩放交互
         if global.layers.len() > 0 {
-            let image_size = global.layers[0].get_image_size();
+            let image_size = global.get_layer(global::LayerType::Image).get_image_size();
             canvas::update_drag_and_zoom(
                 ui,
                 interaction_response,
@@ -148,14 +148,18 @@ impl Canvas {
                 let palette = global.palette.as_ref().unwrap().clone();
                 let mut palette = palette.lock().unwrap();
                 palette.remove_segment_at(global.select_pos);
-                global.layers[2].rerender(canvas::LayerImage::from_palette(&palette));
+                global
+                    .get_layer(global::LayerType::Segmentation)
+                    .rerender(canvas::LayerImage::from_palette(&palette));
             }
             if ui.button("Segment Here").clicked() {
                 global.sampling_points = Some(vec![global.select_pos]);
                 actions::point_segment_action(global);
                 let palette = global.palette.as_ref().unwrap().clone();
                 let palette = palette.lock().unwrap();
-                global.layers[2].rerender(canvas::LayerImage::from_palette(&palette));
+                global
+                    .get_layer(global::LayerType::Segmentation)
+                    .rerender(canvas::LayerImage::from_palette(&palette));
             }
             if ui.button("Reset View").clicked() {
                 global.canvas_state.offset = egui::Vec2::ZERO;

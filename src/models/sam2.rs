@@ -5,9 +5,9 @@ use fast_image_resize as fr;
 use fast_image_resize::images::Image;
 use image::RgbImage;
 use image::{DynamicImage, GenericImageView};
-use ndarray::{Array1, Array2, Array3, Array4, ArrayView2, Axis, Ix2, Ix4, array, s};
+use ndarray::{Array1, Array2, Array3, Array4, ArrayView2, Ix2, Ix4, array, s};
 use ndarray_stats::QuantileExt;
-use ort::ep::{CUDA, DirectML};
+use ort::ep::{CPU, DirectML};
 use ort::session::Session;
 use ort::session::builder::GraphOptimizationLevel;
 use ort::value::TensorRef;
@@ -183,22 +183,25 @@ impl SAM2Model {
         model_rel: usize,
         encoder_path: &str,
         decoder_path: &str,
+        is_cpu: bool,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         log::info!("Loading encoder model from: {}", encoder_path);
         let encoder_session = Session::builder()?
-            .with_execution_providers([
-                // CUDA::default().build(),
-                DirectML::default().build().error_on_failure(),
-            ])?
+            .with_execution_providers([if is_cpu {
+                CPU::default().build()
+            } else {
+                DirectML::default().build().error_on_failure()
+            }])?
             .with_optimization_level(GraphOptimizationLevel::Level3)?
             .with_intra_threads(4)?
             .commit_from_file(encoder_path)?;
         log::info!("Loading decoder model from: {}", decoder_path);
         let decoder_session = Session::builder()?
-            .with_execution_providers([
-                // CUDA::default().build(),
-                DirectML::default().build().error_on_failure(),
-            ])?
+            .with_execution_providers([if is_cpu {
+                CPU::default().build()
+            } else {
+                DirectML::default().build().error_on_failure()
+            }])?
             .with_optimization_level(GraphOptimizationLevel::Level3)?
             .with_intra_threads(4)?
             .commit_from_file(decoder_path)?;
@@ -454,6 +457,7 @@ impl SAM2Model {
         {
             max_index = 0;
         }
+        max_index = 0;
         let mask: ArrayView2<f32> = mask.slice(s![0, max_index, .., ..]);
         let mask = mask.as_standard_layout().into_owned();
         let (mask_vec, _) = mask.into_raw_vec_and_offset();
@@ -490,9 +494,9 @@ impl SAM2Model {
 
         let mut palette = palette::Palette::new(image_size);
 
-        for start_x in (0..image_size).step_by(stride) {
+        for start_x in (0..(image_size - stride)).step_by(stride) {
             // height direction
-            for start_y in (0..image_size).step_by(stride) {
+            for start_y in (0..(image_size - stride)).step_by(stride) {
                 // width direction
                 let outer_loop_start = std::time::Instant::now();
                 log::info!("patch position: {start_x}, {start_y}");
@@ -572,6 +576,18 @@ impl SAM2Model {
                                 if (overlap_area as f32) / old_area > merge_thr
                                     || (overlap_area as f32) / area > merge_thr
                                 {
+                                    // // anti disturb
+                                    // if area > 1.5 * old_area {
+                                    //     let shifted_sample_x = sample_x.saturating_sub(5);
+                                    //     // let shifted_sample_y = sample_y.saturating_sub(5);
+                                    //     let disturb_result =
+                                    //         self.decode([sample_y, shifted_sample_x]);
+                                    //     let disturb_mask = disturb_result.unwrap();
+                                    //     let overlap = (disturb_mask * &mask).sum() as f32;
+                                    //     if overlap < 0.8 * total_area {
+                                    //         continue;
+                                    //     }
+                                    // }
                                     palette.expand_segment(
                                         segment_id,
                                         mask,

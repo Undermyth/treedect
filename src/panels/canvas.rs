@@ -222,15 +222,17 @@ impl Layer {
         let image = LayerImage::from_palette(palette);
         let image = if palette.debug {
             if let LayerImage::EguiImage(mut image_data) = image {
-                for bbox in palette.bboxes.iter() {
-                    let [y, x, size] = bbox;
-                    Layer::cpu_draw_circle(&mut image_data, &[*y, *x], 5, egui::Color32::GREEN);
-                    Layer::cpu_draw_circle(
-                        &mut image_data,
-                        &[y + size, x + size],
-                        5,
-                        egui::Color32::LIGHT_BLUE,
-                    );
+                for (i, bbox) in palette.bboxes.iter().enumerate() {
+                    if palette.valid[i] {
+                        let [y, x, size] = bbox;
+                        Layer::cpu_draw_circle(&mut image_data, &[*y, *x], 5, egui::Color32::GREEN);
+                        Layer::cpu_draw_circle(
+                            &mut image_data,
+                            &[y + size, x + size],
+                            5,
+                            egui::Color32::LIGHT_BLUE,
+                        );
+                    }
                 }
                 LayerImage::EguiImage(image_data)
             } else {

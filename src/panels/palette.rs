@@ -1,7 +1,10 @@
+use ndarray::Array1;
 use ndarray::Array2;
+use ndarray::array;
 use rand::Rng;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::sync::{Arc, Mutex};
 
 static MAX_PALETTE_SIZE: usize = 1024;
 
@@ -30,6 +33,7 @@ pub struct Palette {
     pub areas: Vec<usize>,
     pub n_grids: Option<usize>,
     pub grids: Vec<usize>, // used to calculate the importance score
+    pub mean_colors: Vec<Array1<f32>>,
     pub debug: bool,
     pub cluster_map: Vec<usize>, // map from patch index (start from 0) to cluster index (start from 1)
 }
@@ -54,6 +58,7 @@ impl Palette {
             areas: Vec::new(),
             n_grids: None,
             grids: Vec::new(),
+            mean_colors: Vec::new(),
             debug: false,
             cluster_map: Vec::new(),
         }
@@ -76,15 +81,15 @@ impl Palette {
         }
     }
 
-    /// The statistics include `bboxes` and `grids`. These features
-    /// are not responsively maintained, and will only update according
+    /// The statistics include `bboxes`, `grids` and `mean_colors`.
+    /// These features are not responsively maintained, and will only update according
     /// to the state of palette map when the function is called.
     ///
     /// Note that `n_grids` should be set before calling the method.
     /// If not set, it will give a warning and use the default of 2.
     ///
     /// Note that empty segments should be cleared before calling this.
-    pub fn get_statistics(&mut self) {
+    pub fn get_statistics(&mut self, raw_image: Arc<Mutex<image::RgbImage>>) {
         // auxiliary varibles for grids
         let n_grids = match self.n_grids {
             Some(n_grids) => n_grids,
@@ -104,6 +109,11 @@ impl Palette {
         let mut start_y_idx = vec![self.size; self.max_patch_id];
         let mut end_x_idx = vec![0; self.max_patch_id];
         let mut end_y_idx = vec![0; self.max_patch_id];
+
+        // auxiliary variables for mean_colors
+        let image = raw_image.lock().unwrap();
+        self.mean_colors.resize(self.max_patch_id, Array1::zeros(3));
+        let mut counts = vec![0; self.max_patch_id];
 
         // scan the palette
         for ((y, x), index) in self.map.indexed_iter() {
@@ -125,6 +135,13 @@ impl Palette {
                 if y > end_y_idx[*index - 1] {
                     end_y_idx[*index - 1] = y;
                 }
+
+                // maintain mean_colors
+                let color = image.get_pixel(x as u32, y as u32);
+                let color = array![color[0] as f32, color[1] as f32, color[2] as f32];
+                counts[*index - 1] += 1;
+                self.mean_colors[*index - 1] = &self.mean_colors[*index - 1]
+                    + (color - &self.mean_colors[*index - 1]) / counts[*index - 1] as f32;
             }
         }
 
@@ -191,6 +208,24 @@ impl Palette {
 
         // Now remove the segments
 
+        for segment_id in to_remove {
+            self.remove_segment(segment_id);
+        }
+    }
+
+    pub fn clear_low_luminance_segments(&mut self, thr: u8) {
+        let thr = thr as f32;
+        let to_remove: Vec<usize> = self
+            .mean_colors
+            .iter()
+            .enumerate()
+            .filter(|(i, color)| {
+                let luminance = 0.299 * color[0] + 0.587 * color[1] + 0.114 * color[2];
+                self.valid[*i]
+                    && ((color[0] < thr && color[1] < thr && color[2] < thr) || luminance < thr)
+            })
+            .map(|(i, _)| i + 1)
+            .collect();
         for segment_id in to_remove {
             self.remove_segment(segment_id);
         }

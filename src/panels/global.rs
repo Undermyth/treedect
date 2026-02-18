@@ -14,6 +14,12 @@ pub enum ProgressState {
     Error(String),
 }
 
+pub enum LayerType {
+    Image,
+    Segmentation,
+    Classification,
+}
+
 /// This struct contains most of the parameters to control segmentation and classification.
 pub struct Params {
     /// segmentation resolution, in pixels. default to 512.
@@ -95,6 +101,7 @@ pub struct GlobalState {
     pub canvas_state: canvas::CanvasState,
     pub params: Params,
     pub detail_logging: bool,
+    pub is_cpu: bool,
     pub depth_model: Option<Arc<Mutex<DAM2Model>>>,
     pub segment_model: Option<Arc<Mutex<SAM2Model>>>,
     pub classify_model: Option<Arc<Mutex<Dinov2Model>>>,
@@ -107,13 +114,14 @@ pub struct GlobalState {
 }
 
 impl GlobalState {
-    pub fn new(detail_logging: bool) -> Self {
+    pub fn new(detail_logging: bool, is_cpu: bool) -> Self {
         Self {
             layers: Vec::<canvas::Layer>::new(),
             canvas_state: canvas::CanvasState::default(),
             progress_state: ProgressState::Finished("All processing finished".to_string()),
             params: Params::new(),
             detail_logging: detail_logging,
+            is_cpu: is_cpu,
             depth_model: None,
             segment_model: None,
             classify_model: None,
@@ -123,6 +131,22 @@ impl GlobalState {
             select_pos: [0, 0],
             score_table: None,
             sorted: false,
+        }
+    }
+    pub fn get_layer(&mut self, layer_type: LayerType) -> &mut canvas::Layer {
+        match layer_type {
+            LayerType::Image => {
+                assert!(self.layers.len() > 0);
+                &mut self.layers[0]
+            }
+            LayerType::Segmentation => {
+                assert!(self.layers.len() > 1);
+                &mut self.layers[1]
+            }
+            LayerType::Classification => {
+                assert!(self.layers.len() > 2);
+                &mut self.layers[2]
+            }
         }
     }
 }

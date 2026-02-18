@@ -73,7 +73,10 @@ fn main() -> eframe::Result {
     if detail_logging {
         log::info!("Detailed Logging is enabled");
     }
-
+    let is_cpu = args.iter().any(|arg| arg == "--cpu");
+    if is_cpu {
+        log::info!("CPU mode is enabled");
+    }
     log::info!("Treedect by egui");
     log::info!("ONNX Runtime version: {}", ort::MINOR_VERSION);
     let options = eframe::NativeOptions {
@@ -83,7 +86,7 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "treedect(beta)",
         options,
-        Box::new(|cc| Ok(Box::new(TreeDectApp::new(cc, detail_logging)))),
+        Box::new(|cc| Ok(Box::new(TreeDectApp::new(cc, detail_logging, is_cpu)))),
     )
 }
 
@@ -145,12 +148,12 @@ struct TreeDectApp {
 }
 
 impl TreeDectApp {
-    fn new(cc: &eframe::CreationContext, detail_logging: bool) -> Self {
+    fn new(cc: &eframe::CreationContext, detail_logging: bool, is_cpu: bool) -> Self {
         replace_fonts(&cc.egui_ctx);
         add_font(&cc.egui_ctx);
         // layers will be stacked with the order 0, 1, ...
         Self {
-            global: panels::global::GlobalState::new(detail_logging),
+            global: panels::global::GlobalState::new(detail_logging, is_cpu),
             left_panel: panels::left::LeftPanel::new(),
             right_panel: panels::right::RightPanel::new(),
             central_panel: panels::central::CentralPanel::new(),

@@ -115,17 +115,19 @@ impl ActionPanel {
             }
             if let Some(receiver) = &self.segment_receiver {
                 if let Ok(mut palette) = receiver.try_recv() {
+                    palette.debug = global.detail_logging;
+                    palette.n_grids = Some(global.params.n_grid);
+                    let image = global.raw_image.as_ref().unwrap();
+                    palette.get_statistics(image.clone());
+                    palette.clear_empty_segments();
+                    palette.clear_small_segments(
+                        (global.params.segment_rel * global.params.segment_rel / 400) as usize,
+                    );
+                    palette.clear_low_luminance_segments(global.params.luminance_filt);
                     global.layers.push(canvas::Layer::from_palette(
                         "Segmentation".to_string(),
                         &palette,
                     ));
-                    palette.debug = global.detail_logging;
-                    palette.clear_empty_segments();
-                    palette.clear_small_segments(
-                        (global.params.segment_rel * global.params.segment_rel / 200) as usize,
-                    );
-                    palette.n_grids = Some(global.params.n_grid);
-                    palette.get_statistics();
                     global.palette = Some(Arc::new(Mutex::new(palette)));
                     global.progress_state =
                         global::ProgressState::Finished("Segmentation finished".to_string());
@@ -183,7 +185,7 @@ impl ActionPanel {
                         "Classification".to_string(),
                         palette,
                     ));
-                    global.layers[2].visible = false;
+                    global.get_layer(global::LayerType::Segmentation).visible = false;
                     actions::get_importance_score(global);
                     ui.ctx().request_repaint();
                     global.progress_state =
@@ -209,7 +211,7 @@ impl ActionPanel {
                         global::ProgressState::Error("No classification model loaded".to_string());
                     return;
                 }
-                if global.layers.len() < 3 {
+                if global.layers.len() < 2 {
                     global.progress_state =
                         global::ProgressState::Error("Segmentation is not executed".to_string());
                     return;

@@ -1,9 +1,10 @@
 use fast_image_resize as fr;
 use fast_image_resize::images::Image;
 use image::RgbImage;
-use image::{DynamicImage, GenericImageView};
+use image::{DynamicImage, GenericImageView, Rgb};
+use imageproc::drawing::draw_hollow_rect;
 use ndarray::{Array1, Array2, Array3, Array4, Axis, Ix3, concatenate, s};
-use ort::ep::DirectML;
+use ort::ep::{CPU, DirectML};
 use ort::session::Session;
 use ort::session::builder::GraphOptimizationLevel;
 use ort::value::TensorRef;
@@ -32,6 +33,7 @@ pub struct Dinov2Batch {
 pub struct Dinov2Batcher {
     index: usize,       // index in the palette
     yield_count: usize, // number of patches the already yielded
+    debug: bool,
     len: Option<usize>,
     token_rel: usize,
     model_rel: usize,
@@ -47,10 +49,12 @@ impl Dinov2Batcher {
         batch_size: usize,
         raw_image: Arc<Mutex<RgbImage>>,
         palette: Arc<Mutex<palette::Palette>>,
+        debug: bool,
     ) -> Self {
         Self {
             index: 0,
             yield_count: 0,
+            debug: debug,
             len: None,
             token_rel: 14,
             model_rel: 448,
@@ -78,6 +82,40 @@ impl Dinov2Batcher {
                 len
             }
         }
+    }
+
+    fn save_debug_visualization(
+        &self,
+        patch: &RgbImage,
+        token_ids: &[usize],
+        num_patches: usize,
+        patch_index: usize,
+    ) {
+        let (width, height) = patch.dimensions();
+        // let num_patches = self.token_rel;
+        let grid_width = width as f32 / num_patches as f32;
+        let grid_height = height as f32 / num_patches as f32;
+
+        let mut vis_image = patch.clone();
+
+        let green = Rgb([0, 255, 0]);
+
+        for &token_id in token_ids {
+            let i = token_id / num_patches;
+            let j = token_id % num_patches;
+
+            let x1 = (j as f32 * grid_width) as u32;
+            let y1 = (i as f32 * grid_height) as u32;
+            let x2 = ((j + 1) as f32 * grid_width) as u32;
+            let y2 = ((i + 1) as f32 * grid_height) as u32;
+
+            let rect = imageproc::rect::Rect::at(x1 as i32, y1 as i32).of_size(x2 - x1, y2 - y1);
+            vis_image = draw_hollow_rect(&vis_image, rect, green);
+        }
+
+        let output_path = format!("debug_patch_{:03}.png", patch_index);
+        vis_image.save(&output_path).unwrap();
+        log::info!("Saved debug visualization to {}", output_path);
     }
 }
 
@@ -107,10 +145,10 @@ impl Iterator for Dinov2Batcher {
             }
             // preprocessing. same as SAM2 but with different size
             let [x, y, size] = palette.bboxes[self.index]; // x is width, y is height
-            let patch = raw_image
+            let patch_rgb = raw_image
                 .view(x as u32, y as u32, size as u32, size as u32)
                 .to_image();
-            let patch = DynamicImage::ImageRgb8(patch);
+            let patch = DynamicImage::ImageRgb8(patch_rgb.clone());
             let mut dst_image = Image::new(
                 self.model_rel as u32,
                 self.model_rel as u32,
@@ -153,6 +191,10 @@ impl Iterator for Dinov2Batcher {
                 }
             }
 
+            if self.debug && count == 0 && !token_ids.is_empty() {
+                self.save_debug_visualization(&patch_rgb, &token_ids, num_patches, self.index);
+            }
+
             total_token_ids.push(token_ids);
             segment_ids.push(self.index + 1);
             self.index += 1;
@@ -180,10 +222,14 @@ pub struct Dinov2Model {
 }
 
 impl Dinov2Model {
-    pub fn from_path(path: &str) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn from_path(path: &str, is_cpu: bool) -> Result<Self, Box<dyn std::error::Error>> {
         log::info!("Loading model from: {}", path);
         let session = Session::builder()?
-            .with_execution_providers([DirectML::default().build().error_on_failure()])?
+            .with_execution_providers([if is_cpu {
+                CPU::default().build()
+            } else {
+                DirectML::default().build().error_on_failure()
+            }])?
             .with_optimization_level(GraphOptimizationLevel::Level3)?
             .with_intra_threads(4)?
             .commit_from_file(path)?;

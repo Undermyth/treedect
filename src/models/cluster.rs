@@ -1,16 +1,16 @@
-use ndarray::Array2;
+use ndarray::{Array1, Array2, Axis};
 use numpy::{PyArray1, PyArray2, PyArrayMethods};
 use pyo3::ffi::c_str;
 use pyo3::prelude::*;
 use pyo3::types::{PyList, PyModule};
 use std::env;
 use std::ffi::CString;
-use std::path::PathBuf;
 
 pub struct SegmentFeatures {
     pub segment_ids: Vec<usize>,
     pub features: Array2<f32>,
     pub areas: Vec<usize>,
+    pub mean_colors: Vec<Array1<f32>>,
 }
 
 // 嵌入 Python 代码
@@ -29,30 +29,12 @@ fn ensure_site_packages(py: Python) {
         let path = sys.getattr("path").expect("Failed to get sys.path");
         let path_str = site_packages.to_string_lossy().to_string();
 
-        // // 检查是否已在路径中
-        // let contains = path
-        //     .try_iter()
-        //     .unwrap()
-        //     .any(|p: PyResult<Bound<'_, PyAny>>| {
-        //         if let Ok(p_obj) = p {
-        //             if let Ok(p_str) = p_obj.extract::<String>() {
-        //                 p_str == path_str
-        //             } else {
-        //                 false
-        //             }
-        //         } else {
-        //             false
-        //         }
-        //     });
-
-        // if !contains {
         path.call_method1("insert", (0usize, path_str.as_str()))
             .expect("Failed to add site-packages to path");
         log::debug!(
             "Added site-packages to Python path: {}",
             site_packages.display()
         );
-        // }
     }
 }
 
@@ -96,9 +78,38 @@ pub fn cluster(features: SegmentFeatures, n_classes: usize) -> Vec<Vec<usize>> {
             .reshape([features.areas.len(), 1])
             .expect("Failed to reshape areas array");
 
+        // 将 mean_colors 转换为 numpy 数组 [N, n_colors]
+        let n_samples = features.mean_colors.len();
+        let n_colors = if n_samples > 0 {
+            features.mean_colors[0].len()
+        } else {
+            0
+        };
+        let mean_colors_flat: Vec<f64> = features
+            .mean_colors
+            .iter()
+            .flat_map(|arr| arr.iter().map(|&x| x as f64))
+            .collect();
+        let mean_colors_1d = PyArray1::from_vec(py, mean_colors_flat);
+        let mean_colors_py = mean_colors_1d
+            .reshape([n_samples, n_colors])
+            .expect("Failed to reshape mean_colors array");
+
+        // 拼接 areas 和 mean_colors 形成 manual_features
+        let manual_features_py = PyArray2::from_array(
+            py,
+            &ndarray::concatenate(
+                Axis(1),
+                &[unsafe { areas_py.as_array() }, unsafe {
+                    mean_colors_py.as_array()
+                }],
+            )
+            .expect("Failed to concatenate features"),
+        );
+
         // 调用 Python 的 cluster 函数
         let result = cluster_func
-            .call1((ids_py, features_py, areas_py, n_classes as i64))
+            .call1((ids_py, features_py, manual_features_py, n_classes as i64))
             .expect("Failed to call cluster function");
 
         // 解析返回结果：List[np.ndarray]

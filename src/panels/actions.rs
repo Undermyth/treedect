@@ -168,6 +168,7 @@ pub fn load_segment_model_action(global: &mut global::GlobalState) {
         1024,
         &encoder_path,
         &decoder_path,
+        global.is_cpu,
     );
     match result {
         Ok(model) => {
@@ -210,7 +211,7 @@ pub fn load_classify_model_action(global: &mut global::GlobalState) {
             global::ProgressState::Error(format!("Classification model not found: {}", model_path));
         return;
     }
-    let result = dinov2::Dinov2Model::from_path(&model_path);
+    let result = dinov2::Dinov2Model::from_path(&model_path, global.is_cpu);
     match result {
         Ok(model) => {
             global.classify_model = Some(Arc::new(Mutex::new(model)));
@@ -393,6 +394,7 @@ pub fn point_segment_action(global: &mut global::GlobalState) {
     let sampling_points = global.sampling_points.as_ref().unwrap().clone();
     let raw_image = global.raw_image.as_ref().unwrap();
     let raw_image = raw_image.clone();
+    let image_lock = global.raw_image.as_ref().unwrap();
     let batcher = sam2::SAM2Batcher::new(
         global.params.batch_size,
         global.params.segment_rel as usize,
@@ -425,9 +427,9 @@ pub fn point_segment_action(global: &mut global::GlobalState) {
                 );
                 palette.lock().unwrap().clear_empty_segments();
                 palette.lock().unwrap().clear_small_segments(
-                    (global.params.segment_rel * global.params.segment_rel / 200) as usize,
+                    (global.params.segment_rel * global.params.segment_rel / 400) as usize,
                 );
-                palette.lock().unwrap().get_statistics();
+                palette.lock().unwrap().get_statistics(image_lock.clone());
             }
             Err(e) => {
                 log::error!("Error: {e}");
@@ -448,8 +450,12 @@ pub fn classify_action(
     let raw_image = global.raw_image.as_ref().unwrap();
     let raw_image = raw_image.clone();
     let palette = global.palette.as_ref().unwrap();
-    let mut batcher =
-        dinov2::Dinov2Batcher::new(global.params.batch_size, raw_image, palette.clone());
+    let mut batcher = dinov2::Dinov2Batcher::new(
+        global.params.batch_size,
+        raw_image,
+        palette.clone(),
+        global.detail_logging,
+    );
     let palette = palette.clone();
     let length = batcher.len();
     let model = global.classify_model.as_mut().unwrap().clone();
@@ -504,10 +510,12 @@ fn parse_features(
     palette: Arc<Mutex<palette::Palette>>,
 ) -> cluster::SegmentFeatures {
     let mut valid_areas = Vec::new();
+    let mut mean_colors = Vec::new();
     let palette = palette.lock().unwrap();
     for (index, valid) in palette.valid.iter().enumerate() {
         if *valid {
             valid_areas.push(palette.areas[index]);
+            mean_colors.push(palette.mean_colors[index].clone());
         }
     }
     assert!(valid_areas.len() == features.segment_ids.len());
@@ -515,6 +523,7 @@ fn parse_features(
         segment_ids: features.segment_ids,
         features: features.features,
         areas: valid_areas,
+        mean_colors: mean_colors,
     }
 }
 
