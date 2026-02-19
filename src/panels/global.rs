@@ -91,7 +91,7 @@ impl Params {
             show_cluster_ids: true,
             luminance_filt: 80,
             x_scan_interval: 50,
-            y_scan_interval: 60,
+            y_scan_interval: 50,
             merge_thr: 0.8,
             pen_radius: 10,
         }

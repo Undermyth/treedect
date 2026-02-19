@@ -378,6 +378,7 @@ pub fn segment_action(
     std::thread::spawn(move || {
         let palette = model.lock().unwrap().tiled_diffuse_merge_scan(
             raw_image,
+            progress_sender,
             patch_size as usize,
             lumin_filt,
             x_scan_interval,

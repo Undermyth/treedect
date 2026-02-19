@@ -1,3 +1,4 @@
+use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 use std::vec;
 
@@ -477,6 +478,7 @@ impl SAM2Model {
     pub fn tiled_diffuse_merge_scan(
         &mut self,
         raw_image: Arc<Mutex<RgbImage>>,
+        progress_sender: Sender<f32>,
         patch_size: usize,
         lumin_filt: u8,
         x_scan_interval: usize,
@@ -494,6 +496,9 @@ impl SAM2Model {
 
         let mut palette = palette::Palette::new(image_size);
 
+        let mut counter = 0;
+        let total_counter = ((image_size - 1) / stride) * (image_size - 1) / stride;
+        let _ = progress_sender.send(0.0);
         for start_x in (0..(image_size - stride)).step_by(stride) {
             // height direction
             for start_y in (0..(image_size - stride)).step_by(stride) {
@@ -628,6 +633,8 @@ impl SAM2Model {
                         avg_modify
                     );
                 }
+                counter += 1;
+                let _ = progress_sender.send((counter as f32) / (total_counter as f32));
             }
         }
         palette
