@@ -410,6 +410,7 @@ impl Layer {
     }
 
     pub fn rerender(&mut self, image: LayerImage) {
+        self.raw_image = Some(image.clone());
         if let LayerImage::EguiImage(image_data) = image {
             self.texture
                 .as_mut()
