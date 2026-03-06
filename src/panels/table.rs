@@ -62,7 +62,7 @@ impl TablePanel {
                             let rect = ui.available_rect_before_wrap();
                             ui.painter().rect_filled(rect, 0.0, row_bg_color);
 
-                            ui.label(format!("{:.2}", entry.score));
+                            ui.label(format!("{:.4}", entry.score));
                         });
                     });
                 }

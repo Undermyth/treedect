@@ -11,6 +11,7 @@ pub struct TableEntry {
     pub number_score: f32,
     pub area_score: f32,
     pub grid_score: f32,
+    pub single_area_score: f32,
 }
 
 impl TableEntry {
@@ -21,6 +22,7 @@ impl TableEntry {
             number_score: 0.0,
             area_score: 0.0,
             grid_score: 0.0,
+            single_area_score: 0.0,
         }
     }
 }
@@ -69,6 +71,10 @@ impl Table {
                 "Grid Score".to_string(),
                 Box::new(|entry| entry.grid_score.to_string()),
             ),
+            ColumnConfig::new(
+                "Single Area Score".to_string(),
+                Box::new(|entry| entry.single_area_score.to_string()),
+            ),
         ]
     }
 
@@ -98,11 +104,21 @@ impl Table {
             table.entries[*cluster_id - 1].area_score += area as f32;
             table.entries[*cluster_id - 1].grid_score += grid as f32;
         }
+        let mut single_area_normalizer = 0.0;
+        for entry in table.entries.iter_mut() {
+            entry.single_area_score = entry.area_score / entry.number_score as f32;
+            single_area_normalizer += entry.single_area_score;
+        }
         for entry in table.entries.iter_mut() {
             entry.area_score /= total_area as f32;
             entry.grid_score /= total_grid as f32;
             entry.number_score /= total_number as f32;
-            entry.score = (entry.number_score + entry.area_score + entry.grid_score) / 3.0;
+            entry.single_area_score /= single_area_normalizer;
+            entry.score = (entry.number_score
+                + entry.area_score
+                + entry.grid_score
+                + entry.single_area_score)
+                / 4.0;
         }
         table
     }

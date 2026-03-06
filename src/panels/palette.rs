@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 
-static MAX_PALETTE_SIZE: usize = 1024;
+static MAX_PALETTE_SIZE: usize = 4096;
 
 #[derive(Debug, Clone, Copy)]
 pub struct RGBPixel {

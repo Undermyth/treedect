@@ -119,10 +119,13 @@ impl ActionPanel {
                     palette.n_grids = Some(global.params.n_grid);
                     let image = global.raw_image.as_ref().unwrap();
                     palette.get_statistics(image.clone());
+                    let start = std::time::Instant::now();
                     palette.clear_empty_segments();
                     palette.clear_small_segments(
                         (global.params.segment_rel * global.params.segment_rel / 400) as usize,
                     );
+                    let elapsed = start.elapsed();
+                    log::info!("Clean up time taken: {:?}", elapsed);
                     palette.clear_low_luminance_segments(global.params.luminance_filt);
                     global.layers.push(canvas::Layer::from_palette(
                         "Segmentation".to_string(),

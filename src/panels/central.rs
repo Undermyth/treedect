@@ -102,7 +102,7 @@ impl Canvas {
                         pos_on_canvas =
                             pos_on_canvas * global.canvas_state.scale + global.canvas_state.offset;
                         let font_size =
-                            18.0 * global.canvas_state.scale / global.canvas_state.initial_scale;
+                            12.0 * global.canvas_state.scale / global.canvas_state.initial_scale;
                         let text = egui::RichText::new(cluster_id.to_string())
                             .size(font_size)
                             .color(egui::Color32::WHITE);
