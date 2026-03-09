@@ -261,6 +261,30 @@ impl Canvas {
                     }
                 }
             }
+            if ui.button("Change Label to ..").clicked() {
+                let segment_id = global
+                    .palette
+                    .as_ref()
+                    .unwrap()
+                    .lock()
+                    .unwrap()
+                    .get_id_at_position(global.select_pos);
+                match segment_id {
+                    Some(segment_id) => {
+                        global.change_label_popup = Some(global::ChangeLabelPopupState::new());
+                        if let Some(ref mut popup) = global.change_label_popup {
+                            popup.is_open = true;
+                            popup.target_segment_id = Some(segment_id);
+                        }
+                    }
+                    None => {
+                        global.progress_state = global::ProgressState::Error(
+                            "Please select a segment first".to_string(),
+                        );
+                    }
+                }
+                ui.close();
+            }
             if ui.button("Reset View").clicked() {
                 global.canvas_state.offset = egui::Vec2::ZERO;
                 global.canvas_state.scale = 1.0;
@@ -275,6 +299,50 @@ impl Canvas {
                 ui.close();
             }
         });
+
+        // 显示 Change Label 弹窗
+        if let Some(ref mut popup) = global.change_label_popup {
+            if popup.is_open {
+                let response = egui::containers::modal::Modal::new(egui::Id::new(
+                    "change_label_modal",
+                ))
+                .show(ctx, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("Label after change: ");
+                        ui.text_edit_singleline(&mut popup.input_text);
+                    });
+
+                    ui.horizontal(|ui| {
+                        if ui.button("Cancel").clicked() {
+                            popup.is_open = false;
+                            popup.input_text.clear();
+                        }
+                        if ui.button("Submit").clicked() {
+                            let new_label = popup.input_text.trim().to_string();
+                            if !new_label.is_empty() {
+                                if let Some(segment_id) = popup.target_segment_id {
+                                    if let Some(palette) = &global.palette {
+                                        let mut palette = palette.lock().unwrap();
+                                        log::info!(
+                                            "Change label request: segment_id={}, new_label={}",
+                                            segment_id,
+                                            new_label
+                                        );
+                                    }
+                                }
+                            }
+                            popup.is_open = false;
+                            popup.input_text.clear();
+                        }
+                    });
+                });
+
+                if response.backdrop_response.clicked() {
+                    popup.is_open = false;
+                    popup.input_text.clear();
+                }
+            }
+        }
 
         // 记录右键点击坐标
         if plot_area_response.secondary_clicked() {

@@ -98,6 +98,27 @@ impl Params {
     }
 }
 
+/// State for the "Change Label" popup modal dialog.
+/// Used to store the input text and target segment when changing a segment's label.
+pub struct ChangeLabelPopupState {
+    /// Whether the modal is currently open
+    pub is_open: bool,
+    /// The text input for the new label value
+    pub input_text: String,
+    /// The segment ID whose label is being changed
+    pub target_segment_id: Option<usize>,
+}
+
+impl ChangeLabelPopupState {
+    pub fn new() -> Self {
+        Self {
+            is_open: false,
+            input_text: String::new(),
+            target_segment_id: None,
+        }
+    }
+}
+
 pub struct GlobalState {
     pub layers: Vec<canvas::Layer>,
     pub progress_state: ProgressState,
@@ -117,6 +138,9 @@ pub struct GlobalState {
     pub edit_mode: bool,
     pub increment: bool,
     pub edit_segment_id: Option<usize>,
+    /// State for the "Change Label" popup modal dialog.
+    /// Triggered from the canvas context menu.
+    pub change_label_popup: Option<ChangeLabelPopupState>,
 }
 
 impl GlobalState {
@@ -140,6 +164,7 @@ impl GlobalState {
             edit_mode: false,
             increment: false,
             edit_segment_id: None,
+            change_label_popup: None,
         }
     }
     pub fn get_layer(&mut self, layer_type: LayerType) -> &mut canvas::Layer {
