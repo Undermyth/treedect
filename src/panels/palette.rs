@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 
-static MAX_PALETTE_SIZE: usize = 4096;
+static MAX_PALETTE_SIZE: usize = 8192;
 
 #[derive(Debug, Clone, Copy)]
 pub struct RGBPixel {
@@ -206,11 +206,10 @@ impl Palette {
             .map(|(i, _)| i + 1)
             .collect();
 
-        // Now remove the segments
-
-        for segment_id in to_remove {
-            self.remove_segment(segment_id);
+        for segment_id in to_remove.iter() {
+            self.valid[*segment_id - 1] = false;
         }
+        self.remove_invalid_segment();
     }
 
     pub fn clear_low_luminance_segments(&mut self, thr: u8) {
@@ -226,9 +225,10 @@ impl Palette {
             })
             .map(|(i, _)| i + 1)
             .collect();
-        for segment_id in to_remove {
-            self.remove_segment(segment_id);
+        for segment_id in to_remove.iter() {
+            self.valid[*segment_id - 1] = false;
         }
+        self.remove_invalid_segment();
     }
 
     pub fn get_id_at_position(&self, pos: [usize; 2]) -> Option<usize> {
@@ -247,10 +247,12 @@ impl Palette {
             self.valid[segment_id - 1] = false;
         }
     }
-    pub fn remove_segment(&mut self, segment_id: usize) {
-        let new_map = self.map.mapv(|x| if x == segment_id { 0 } else { x });
-        self.map = new_map;
-        self.valid[segment_id - 1] = false;
+    pub fn remove_invalid_segment(&mut self) {
+        for segment_id in self.map.iter_mut() {
+            if *segment_id != 0 && !self.valid[*segment_id - 1] {
+                *segment_id = 0;
+            }
+        }
     }
 
     /// Detect whether a given segment is overlaped with existing segments, and how.
