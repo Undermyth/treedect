@@ -343,6 +343,7 @@ impl Palette {
             }
         }
         self.areas[main_id - 1] = area;
+        self.highlight[main_id - 1] = false;
     }
 
     /// expand a existing segment with the given segment. Areas are responsively maintained.

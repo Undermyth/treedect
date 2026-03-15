@@ -272,9 +272,15 @@ impl Canvas {
                     .get_id_at_position(global.select_pos);
                 match segment_id {
                     Some(segment_id) => {
+                        let palette = global.palette.as_ref().unwrap().clone();
+                        let mut palette = palette.lock().unwrap();
                         global.merge_mode = true;
                         global.merge_list.clear();
                         global.merge_list.insert(segment_id);
+                        palette.highlight[segment_id - 1] = true;
+                        global
+                            .get_layer(global::LayerType::Segmentation)
+                            .rerender(canvas::LayerImage::from_palette(&palette));
                     }
                     None => {
                         global.progress_state = global::ProgressState::Error(
