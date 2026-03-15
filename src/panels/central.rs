@@ -262,6 +262,27 @@ impl Canvas {
                     }
                 }
             }
+            if ui.button("Merge with ..").clicked() {
+                let segment_id = global
+                    .palette
+                    .as_ref()
+                    .unwrap()
+                    .lock()
+                    .unwrap()
+                    .get_id_at_position(global.select_pos);
+                match segment_id {
+                    Some(segment_id) => {
+                        global.merge_mode = true;
+                        global.merge_list.clear();
+                        global.merge_list.insert(segment_id);
+                    }
+                    None => {
+                        global.progress_state = global::ProgressState::Error(
+                            "Please select a segment first".to_string(),
+                        );
+                    }
+                }
+            }
             if ui.button("Change Label to ..").clicked() {
                 let segment_id = global
                     .palette
@@ -343,9 +364,35 @@ impl Canvas {
                 popup.rerender = false;
                 let palette = global.palette.as_ref().unwrap().clone();
                 let palette = palette.lock().unwrap();
-                global.get_layer(global::LayerType::Classification).rerender(canvas::LayerImage::from_palette_cluster(&palette));
+                global
+                    .get_layer(global::LayerType::Classification)
+                    .rerender(canvas::LayerImage::from_palette_cluster(&palette));
                 let table = score::Table::build_from_palette(&palette);
                 global.score_table = Some(table);
+            }
+        }
+
+        if global.merge_mode && plot_area_response.clicked() {
+            let pos = plot_area_response
+                .interact_pointer_pos()
+                .unwrap_or_default();
+            let canvas_pos = pos - response.rect.min;
+            let canvas_pos = (canvas_pos - global.canvas_state.offset) / global.canvas_state.scale;
+            let select_pos = [canvas_pos.x as usize, canvas_pos.y as usize];
+            let palette = global.palette.as_ref().unwrap().clone();
+            let mut palette = palette.lock().unwrap();
+            let segment_id = palette.get_id_at_position(select_pos);
+            if let Some(segment_id) = segment_id {
+                if global.merge_list.contains(&segment_id) {
+                    global.merge_list.remove(&segment_id);
+                    palette.highlight[segment_id - 1] = false;
+                } else {
+                    global.merge_list.insert(segment_id);
+                    palette.highlight[segment_id - 1] = true;
+                }
+                global
+                    .get_layer(global::LayerType::Segmentation)
+                    .rerender(canvas::LayerImage::from_palette(&palette));
             }
         }
 

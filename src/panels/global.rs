@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 
 use crate::models::dam2::DAM2Model;
@@ -139,8 +140,10 @@ pub struct GlobalState {
     pub score_table: Option<Table>,
     pub sorted: bool,
     pub edit_mode: bool,
+    pub merge_mode: bool,
     pub increment: bool,
     pub edit_segment_id: Option<usize>,
+    pub merge_list: HashSet<usize>,
     /// State for the "Change Label" popup modal dialog.
     /// Triggered from the canvas context menu.
     pub change_label_popup: Option<ChangeLabelPopupState>,
@@ -165,8 +168,10 @@ impl GlobalState {
             score_table: None,
             sorted: false,
             edit_mode: false,
+            merge_mode: false,
             increment: false,
             edit_segment_id: None,
+            merge_list: HashSet::new(),
             change_label_popup: None,
         }
     }

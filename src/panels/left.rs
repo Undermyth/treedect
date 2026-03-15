@@ -187,7 +187,6 @@ impl ActionPanel {
                         &palette,
                     ));
                     global.get_layer(global::LayerType::Segmentation).visible = false;
-                    log::info!("here!");
                     let table = score::Table::build_from_palette(&palette);
                     global.score_table = Some(table);
                     ui.ctx().request_repaint();
@@ -219,6 +218,10 @@ impl ActionPanel {
                         global::ProgressState::Error("Segmentation is not executed".to_string());
                     return;
                 }
+                let image = global.raw_image.as_ref().unwrap();
+                let palette = global.palette.as_ref().unwrap().clone();
+                let mut palette = palette.lock().unwrap();
+                palette.get_statistics(image.clone());
                 let (progress_sender, progress_receiver) = channel();
                 let (classify_sender, classify_receiver) = channel();
                 self.classify_progress_receiver = Some(progress_receiver);
@@ -233,6 +236,16 @@ impl ActionPanel {
                 .clicked()
             {
                 global.edit_mode = false;
+                if global.merge_mode == true {
+                    let palette = global.palette.as_ref().unwrap().clone();
+                    let mut palette = palette.lock().unwrap();
+                    palette.merge_segments(&global.merge_list);
+                    global.merge_mode = false;
+                    global.merge_list.clear();
+                    global
+                        .get_layer(global::LayerType::Segmentation)
+                        .rerender(canvas::LayerImage::from_palette(&palette));
+                }
                 global.edit_segment_id = None;
                 global
                     .palette

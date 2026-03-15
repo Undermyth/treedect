@@ -3,6 +3,8 @@ use std::sync::{Arc, Mutex};
 
 use crate::panels::palette;
 
+static HIGHLIGHT_COLOR: [u8; 3] = [223, 142, 29];
+
 /// 画布状态，用于管理平移和缩放
 pub struct CanvasState {
     /// 画布在世界空间中的偏移量（平移）
@@ -103,11 +105,16 @@ impl LayerImage {
             egui::ColorImage::filled([palette.size, palette.size], egui::Color32::TRANSPARENT);
         for ((y, x), index) in palette.map.indexed_iter() {
             if *index != 0 {
-                image_data[(x, y)] = egui::Color32::from_rgb(
-                    palette.color_map[*index].r,
-                    palette.color_map[*index].g,
-                    palette.color_map[*index].b,
-                );
+                if palette.highlight[*index - 1] {
+                    image_data[(x, y)] = egui::Color32::from_rgb(HIGHLIGHT_COLOR[0], HIGHLIGHT_COLOR[1], HIGHLIGHT_COLOR[2]);
+                }
+                else {
+                    image_data[(x, y)] = egui::Color32::from_rgb(
+                        palette.color_map[*index].r,
+                        palette.color_map[*index].g,
+                        palette.color_map[*index].b,
+                    );
+                }
             }
         }
         LayerImage::EguiImage(image_data)

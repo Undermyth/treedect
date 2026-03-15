@@ -30,6 +30,7 @@ pub struct Palette {
     pub color_map: [RGBPixel; MAX_PALETTE_SIZE],
     pub bboxes: Vec<[usize; 3]>,
     pub valid: Vec<bool>,
+    pub highlight: Vec<bool>,
     pub areas: Vec<usize>,
     pub n_grids: Option<usize>,
     pub grids: Vec<usize>, // used to calculate the importance score
@@ -55,6 +56,7 @@ impl Palette {
             color_map,
             bboxes: Vec::new(),
             valid: Vec::new(),
+            highlight: Vec::new(),
             areas: Vec::new(),
             n_grids: None,
             grids: Vec::new(),
@@ -323,6 +325,24 @@ impl Palette {
         }
         self.areas.push(area);
         self.valid.push(true);
+        self.highlight.push(false);
+    }
+
+    pub fn merge_segments(&mut self, merge_list: &HashSet<usize>) {
+        let main_id = merge_list.iter().min().unwrap();
+        let mut area = 0;
+        for segment_id in self.map.iter_mut() {
+            if merge_list.contains(segment_id) {
+                *segment_id = *main_id;
+                area += 1;
+            }
+        }
+        for segment_id in merge_list.iter() {
+            if segment_id != main_id {
+                self.valid[*segment_id - 1] = false;
+            }
+        }
+        self.areas[main_id - 1] = area;
     }
 
     /// expand a existing segment with the given segment. Areas are responsively maintained.
