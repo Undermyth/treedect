@@ -78,8 +78,7 @@ impl Table {
         ]
     }
 
-    pub fn build_from_palette(palette: Arc<Mutex<palette::Palette>>) -> Self {
-        let palette = palette.lock().unwrap();
+    pub fn build_from_palette(palette: &palette::Palette) -> Self {
         let mut table = Self::new();
         table
             .entries

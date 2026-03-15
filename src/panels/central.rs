@@ -3,6 +3,7 @@ use eframe::{egui, epaint};
 use crate::panels::actions;
 use crate::panels::canvas;
 use crate::panels::global;
+use crate::utils::score;
 
 use egui_plot::Plot;
 use egui_plot::PlotPoint;
@@ -320,27 +321,31 @@ impl Canvas {
                         if ui.button("Submit").clicked() {
                             let new_label = popup.input_text.trim().to_string();
                             if !new_label.is_empty() {
+                                let new_label: usize = new_label.parse().unwrap();
                                 if let Some(segment_id) = popup.target_segment_id {
-                                    if let Some(palette) = &global.palette {
-                                        let mut palette = palette.lock().unwrap();
-                                        log::info!(
-                                            "Change label request: segment_id={}, new_label={}",
-                                            segment_id,
-                                            new_label
-                                        );
-                                    }
+                                    let palette = global.palette.as_ref().unwrap().clone();
+                                    let mut palette = palette.lock().unwrap();
+                                    palette.cluster_map[segment_id - 1] = new_label;
                                 }
                             }
                             popup.is_open = false;
+                            popup.rerender = true;
                             popup.input_text.clear();
                         }
                     });
                 });
-
                 if response.backdrop_response.clicked() {
                     popup.is_open = false;
                     popup.input_text.clear();
                 }
+            }
+            if popup.rerender {
+                popup.rerender = false;
+                let palette = global.palette.as_ref().unwrap().clone();
+                let palette = palette.lock().unwrap();
+                global.get_layer(global::LayerType::Classification).rerender(canvas::LayerImage::from_palette_cluster(&palette));
+                let table = score::Table::build_from_palette(&palette);
+                global.score_table = Some(table);
             }
         }
 

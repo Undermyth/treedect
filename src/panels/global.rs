@@ -107,6 +107,8 @@ pub struct ChangeLabelPopupState {
     pub input_text: String,
     /// The segment ID whose label is being changed
     pub target_segment_id: Option<usize>,
+    /// state: the segment id is submitted and should rerender the figure
+    pub rerender: bool
 }
 
 impl ChangeLabelPopupState {
@@ -115,6 +117,7 @@ impl ChangeLabelPopupState {
             is_open: false,
             input_text: String::new(),
             target_segment_id: None,
+            rerender: false
         }
     }
 }

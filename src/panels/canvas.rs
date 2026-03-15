@@ -112,8 +112,8 @@ impl LayerImage {
         }
         LayerImage::EguiImage(image_data)
     }
-    pub fn from_palette_cluster(palette: Arc<Mutex<palette::Palette>>) -> Self {
-        let palette = palette.lock().unwrap();
+    pub fn from_palette_cluster(palette: &palette::Palette) -> Self {
+        // let palette = palette.lock().unwrap();
         let mut image_data =
             egui::ColorImage::filled([palette.size, palette.size], egui::Color32::TRANSPARENT);
         for ((y, x), index) in palette.map.indexed_iter() {
@@ -251,7 +251,7 @@ impl Layer {
         }
     }
 
-    pub fn from_palette_cluster(name: String, palette: Arc<Mutex<palette::Palette>>) -> Self {
+    pub fn from_palette_cluster(name: String, palette: &palette::Palette) -> Self {
         let image = LayerImage::from_palette_cluster(palette);
         Self {
             name,

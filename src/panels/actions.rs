@@ -528,13 +528,6 @@ fn parse_features(
     }
 }
 
-pub fn get_importance_score(global: &mut global::GlobalState) {
-    let palette = global.palette.as_ref().unwrap();
-    let palette = palette.clone();
-    let table = score::Table::build_from_palette(palette);
-    global.score_table = Some(table);
-}
-
 pub fn export_image_action(global: &mut global::GlobalState, path: String) {
     // 1. 获取图像尺寸（从第一个可见图层）
     let (width, height) = {

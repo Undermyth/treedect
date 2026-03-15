@@ -10,6 +10,7 @@ use crate::panels::canvas::LayerImage;
 use crate::panels::components;
 use crate::panels::global;
 use crate::panels::palette;
+use crate::utils::score;
 
 pub struct ActionPanel {
     image_select_receiver: Option<Receiver<String>>,
@@ -179,14 +180,16 @@ impl ActionPanel {
             }
             if let Some(receiver) = &self.classify_receiver {
                 if let Ok(_finished) = receiver.try_recv() {
-                    let palette = global.palette.as_ref().unwrap();
-                    let palette = palette.clone();
+                    let palette = global.palette.as_ref().unwrap().clone();
+                    let palette = palette.lock().unwrap();
                     global.layers.push(Layer::from_palette_cluster(
                         "Classification".to_string(),
-                        palette,
+                        &palette,
                     ));
                     global.get_layer(global::LayerType::Segmentation).visible = false;
-                    actions::get_importance_score(global);
+                    log::info!("here!");
+                    let table = score::Table::build_from_palette(&palette);
+                    global.score_table = Some(table);
                     ui.ctx().request_repaint();
                     global.progress_state =
                         global::ProgressState::Finished("Classification finished".to_string());
