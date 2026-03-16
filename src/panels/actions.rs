@@ -13,6 +13,7 @@ use crate::panels::canvas;
 use crate::panels::global;
 use crate::panels::palette;
 use crate::utils::score;
+use crate::utils::save;
 
 static MODEL2FILENAME: Map<&'static str, &'static str> = phf_map! {
     "sam2_small" => "sam2_hiera_small",
@@ -530,6 +531,17 @@ fn parse_features(
 }
 
 pub fn export_image_action(global: &mut global::GlobalState, path: String) {
+    // 0. save palette to file
+    let palette = global.palette.as_ref().unwrap().clone();
+    let palette = palette.lock().unwrap();
+    let archive = save::PaletteArchive {
+        map: palette.map.clone(),
+        cluster_map: palette.cluster_map.clone()
+    };
+    let json_path = std::path::Path::new(&path).with_extension("json").to_string_lossy().to_string();
+    archive.to_file(&json_path).unwrap();
+    log::info!("Palette archive saved to {:?}", json_path);
+
     // 1. 获取图像尺寸（从第一个可见图层）
     let (width, height) = {
         let first_visible = global.layers.iter().find(|l| l.visible);
@@ -574,47 +586,49 @@ pub fn export_image_action(global: &mut global::GlobalState, path: String) {
             }
         }
     }
+    log::info!("Complete image blending");
 
     // 4. 添加文字层（如果show_cluster_ids=true且palette存在且有clusters）
     if global.params.show_cluster_ids {
-        if let Some(ref palette_arc) = global.palette {
-            let palette = palette_arc.lock().unwrap();
-            if palette.num_clusters > 0 {
-                // 加载嵌入字体
-                let font_data = include_bytes!("../IosevkaTermNerdFont-Regular.ttf");
-                let font = ab_glyph::FontArc::try_from_slice(font_data)
-                    .expect("Failed to load embedded font");
+        if palette.num_clusters > 0 {
+            // 加载嵌入字体
+            let font_data = include_bytes!("../IosevkaTermNerdFont-Regular.ttf");
+            let font = ab_glyph::FontArc::try_from_slice(font_data)
+                .expect("Failed to load embedded font");
 
-                // 字体大小固定为20
-                let font_size = 200.0;
-                let scale = ab_glyph::PxScale {
-                    x: font_size,
-                    y: font_size,
-                };
+            // 字体大小固定为20
+            let font_size = 100.0;
+            let scale = ab_glyph::PxScale {
+                x: font_size,
+                y: font_size,
+            };
 
-                // 绘制每个cluster的文字
-                for (i, cluster_id) in palette.cluster_map.iter().enumerate() {
-                    let [x, y, size] = palette.bboxes[i];
-                    let center_x = (x + size / 2) as i32;
-                    let center_y = (y + size / 2) as i32;
-
-                    let text = cluster_id.to_string();
-
-                    // 使用imageproc绘制白色文字
-                    let color = image::Rgba([255, 255, 255, 255]);
-                    output_image = imageproc::drawing::draw_text(
-                        &output_image,
-                        color,
-                        center_x,
-                        center_y,
-                        scale,
-                        &font,
-                        &text,
-                    );
+            // 绘制每个cluster的文字
+            for (i, cluster_id) in palette.cluster_map.iter().enumerate() {
+                if *cluster_id == 0 {
+                    continue;
                 }
+                let [x, y, size] = palette.bboxes[i];
+                let center_x = (x + size / 3) as i32;
+                let center_y = (y + size / 3) as i32;
+
+                let text = cluster_id.to_string();
+
+                // 使用imageproc绘制白色文字
+                let color = image::Rgba([255, 255, 255, 255]);
+                output_image = imageproc::drawing::draw_text(
+                    &output_image,
+                    color,
+                    center_x,
+                    center_y,
+                    scale,
+                    &font,
+                    &text,
+                );
             }
         }
     }
+    log::info!("Complete text rendering");
 
     // 5. 保存为TIFF文件
     let path = std::path::Path::new(&path);

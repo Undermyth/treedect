@@ -289,6 +289,7 @@ impl Canvas {
                     }
                 }
             }
+
             if ui.button("Change Label to ..").clicked() {
                 let segment_id = global
                     .palette
@@ -353,6 +354,11 @@ impl Canvas {
                                     let palette = global.palette.as_ref().unwrap().clone();
                                     let mut palette = palette.lock().unwrap();
                                     palette.cluster_map[segment_id - 1] = new_label;
+                                    log::info!(
+                                        "Change label request: segment_id={}, new_label={}",
+                                        segment_id,
+                                        new_label
+                                    );
                                 }
                             }
                             popup.is_open = false;
@@ -361,6 +367,7 @@ impl Canvas {
                         }
                     });
                 });
+
                 if response.backdrop_response.clicked() {
                     popup.is_open = false;
                     popup.input_text.clear();
