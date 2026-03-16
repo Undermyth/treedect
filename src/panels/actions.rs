@@ -451,6 +451,7 @@ pub fn classify_action(
     let raw_image = global.raw_image.as_ref().unwrap();
     let raw_image = raw_image.clone();
     let palette = global.palette.as_ref().unwrap();
+    palette.clone().lock().unwrap().get_statistics(raw_image.clone());
     let mut batcher = dinov2::Dinov2Batcher::new(
         global.params.batch_size,
         raw_image,

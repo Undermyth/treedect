@@ -218,10 +218,6 @@ impl ActionPanel {
                         global::ProgressState::Error("Segmentation is not executed".to_string());
                     return;
                 }
-                let image = global.raw_image.as_ref().unwrap();
-                let palette = global.palette.as_ref().unwrap().clone();
-                let mut palette = palette.lock().unwrap();
-                palette.get_statistics(image.clone());
                 let (progress_sender, progress_receiver) = channel();
                 let (classify_sender, classify_receiver) = channel();
                 self.classify_progress_receiver = Some(progress_receiver);
