@@ -1,4 +1,5 @@
 use eframe::{egui, epaint};
+use ndarray::array;
 
 use crate::panels::actions;
 use crate::panels::canvas;
@@ -289,7 +290,6 @@ impl Canvas {
                     }
                 }
             }
-
             if ui.button("Change Label to ..").clicked() {
                 let segment_id = global
                     .palette
@@ -314,19 +314,38 @@ impl Canvas {
                 }
                 ui.close();
             }
-            if ui.button("Reset View").clicked() {
-                global.canvas_state.offset = egui::Vec2::ZERO;
-                global.canvas_state.scale = 1.0;
-                ui.close();
+            if ui.button("Create Segment").clicked() {
+                let palette = global.palette.as_ref().unwrap().clone();
+                let mut palette = palette.lock().unwrap();
+                let segment_id = palette.get_id_at_position(global.select_pos);
+                match segment_id {
+                    None => {
+                        let mask = array![[1]];
+                        palette.add_segment(mask, [global.select_pos[1], global.select_pos[0]], 1);
+                        global.edit_mode = true;
+                        global.increment = true;
+                        global.edit_segment_id = Some(palette.max_patch_id);
+                    }
+                    Some(_) => {
+                        global.progress_state = global::ProgressState::Error(
+                            "Segment already exists".to_string()
+                        );
+                    }
+                }
             }
-            if ui.button("Zoom In").clicked() {
-                global.canvas_state.scale *= 1.2;
-                ui.close();
-            }
-            if ui.button("Zoom Out").clicked() {
-                global.canvas_state.scale *= 0.8;
-                ui.close();
-            }
+            // if ui.button("Reset View").clicked() {
+            //     global.canvas_state.offset = egui::Vec2::ZERO;
+            //     global.canvas_state.scale = 1.0;
+            //     ui.close();
+            // }
+            // if ui.button("Zoom In").clicked() {
+            //     global.canvas_state.scale *= 1.2;
+            //     ui.close();
+            // }
+            // if ui.button("Zoom Out").clicked() {
+            //     global.canvas_state.scale *= 0.8;
+            //     ui.close();
+            // }
         });
 
         // 显示 Change Label 弹窗

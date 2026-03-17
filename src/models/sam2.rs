@@ -326,6 +326,7 @@ impl SAM2Model {
             } else {
                 1
             };
+            max_index = 0;
             // let decoded_mask = mask.mapv(|x| (x > 0.0) as usize);
             // let valid_area = decoded_mask.sum();
             // if max_index == 1 {
